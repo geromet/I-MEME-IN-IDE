@@ -67,6 +67,10 @@ public partial class App : Application
         services.AddSingleton<ISettingsCategory>(sp => sp.GetRequiredService<WhisperXSettings>());
         services.AddSingleton<ExternalToolSettings>();
         services.AddSingleton<ISettingsCategory>(sp => sp.GetRequiredService<ExternalToolSettings>());
+        services.AddSingleton<MfaModelProbe>();
+        services.AddSingleton(sp => new MfaSettings(
+            sp.GetRequiredService<MfaModelProbe>(), sp.GetRequiredService<ISettingsStore>()));
+        services.AddSingleton<ISettingsCategory>(sp => sp.GetRequiredService<MfaSettings>());
         services.AddSingleton<SettingsRegistry>();
 
         services.AddSingleton(TranscriptParserFactory.CreateDefault());

@@ -33,8 +33,29 @@ public partial class LibraryViewModel(
     [NotifyCanExecuteChangedFor(nameof(ImportCommand))]
     private bool _isBusy;
 
+    /// <summary>
+    /// Whether the current status message is a failure. Failures were previously indistinguishable
+    /// from routine chatter - same thin grey line - so a realignment that failed with an accurate,
+    /// actionable message read as the button doing nothing at all.
+    /// </summary>
+    [ObservableProperty]
+    private bool _isStatusError;
+
     [ObservableProperty]
     private string _statusMessage = "No media imported yet.";
+
+    /// <summary>
+    /// Any plain assignment to StatusMessage is a non-failure, so clearing the flag here means a
+    /// success message can never inherit the previous failure's styling. SetError assigns and then
+    /// raises the flag.
+    /// </summary>
+    partial void OnStatusMessageChanged(string value) => IsStatusError = false;
+
+    private void SetError(string message)
+    {
+        StatusMessage = message;
+        IsStatusError = true;
+    }
 
     public ObservableCollection<MediaRowViewModel> Items { get; } = [];
 
@@ -57,7 +78,7 @@ public partial class LibraryViewModel(
         }
         catch (Exception ex)
         {
-            StatusMessage = $"Failed to load the library: {ex.Message}";
+            SetError($"Failed to load the library: {ex.Message}");
         }
         finally
         {
@@ -76,7 +97,7 @@ public partial class LibraryViewModel(
 
         if (!TryClassify(files, out var transcriptPath, out var mediaPath, out var error))
         {
-            StatusMessage = error;
+            SetError(error);
             return;
         }
 
@@ -99,7 +120,7 @@ public partial class LibraryViewModel(
         }
         catch (Exception ex)
         {
-            StatusMessage = $"Import failed: {ex.Message}";
+            SetError($"Import failed: {ex.Message}");
             return;
         }
         finally
@@ -196,7 +217,7 @@ public partial class LibraryViewModel(
         }
         catch (Exception ex)
         {
-            StatusMessage = $"Realign failed for \"{row.Title}\": {ex.Message}";
+            SetError($"Realign failed for \"{row.Title}\": {ex.Message}");
         }
         finally
         {

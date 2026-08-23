@@ -15,7 +15,7 @@ public class InMemorySettingsStore : ISettingsStore
     public string Get(SettingDefinition definition) =>
         _values.TryGetValue(definition.Key, out var value) && definition.IsValidValue(value)
             ? value
-            : definition.DefaultValue;
+            : definition.EffectiveDefault;
 
     public void Set(SettingDefinition definition, string value)
     {

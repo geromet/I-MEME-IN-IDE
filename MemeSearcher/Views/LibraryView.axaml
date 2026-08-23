@@ -14,7 +14,25 @@
             <Button Grid.Column="2" Content="Add Media..." Command="{Binding ImportCommand}" />
         </Grid>
 
-        <TextBlock Grid.Row="1" Margin="0,8,0,12" Text="{Binding StatusMessage}" Opacity="0.7" />
+        <!-- Failures get a bordered, wrapping, selectable block; routine status stays a quiet line.
+             External tools produce long, specific messages ("acoustic model 'x' is not installed
+             (mfa model download acoustic x)") and those are only useful if they can be read in
+             full and copied. -->
+        <Border Grid.Row="1"
+                Margin="0,8,0,12"
+                Padding="10"
+                CornerRadius="4"
+                Background="#33C04040"
+                IsVisible="{Binding IsStatusError}">
+            <SelectableTextBlock Text="{Binding StatusMessage}" TextWrapping="Wrap" />
+        </Border>
+
+        <TextBlock Grid.Row="1"
+                   Margin="0,8,0,12"
+                   Text="{Binding StatusMessage}"
+                   Opacity="0.7"
+                   TextWrapping="Wrap"
+                   IsVisible="{Binding !IsStatusError}" />
 
         <ListBox Grid.Row="2" ItemsSource="{Binding Items}">
             <ListBox.ItemTemplate>

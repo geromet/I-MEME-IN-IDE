@@ -253,6 +253,61 @@ public class LibraryViewModelTests : IDisposable
         Assert.True(File.Exists(srtPath));
     }
 
+    /// <summary>
+    /// A failed import must be visually distinguishable from routine status. Before this, both
+    /// were the same thin grey line, so an accurate and actionable failure read as nothing having
+    /// happened - which is exactly how a model-not-installed realignment failure was missed.
+    /// </summary>
+    [Fact]
+    public async Task ImportAsync_MarksAFailureAsAnError()
+    {
+        var viewModel = await TrySetUpAsync("/does/not/exist.srt");
+        if (viewModel is null)
+        {
+            return;
+        }
+
+        await viewModel.ImportCommand.ExecuteAsync(null);
+
+        Assert.True(viewModel.IsStatusError);
+        Assert.NotEqual("", viewModel.StatusMessage);
+    }
+
+    [Fact]
+    public async Task LoadAsync_LeavesRoutineStatusUnmarked()
+    {
+        var viewModel = await TrySetUpAsync();
+        if (viewModel is null)
+        {
+            return;
+        }
+
+        await viewModel.LoadAsync();
+
+        Assert.False(viewModel.IsStatusError);
+    }
+
+    /// <summary>
+    /// A success after a failure must not inherit the failure's styling - a stale red block is
+    /// worse than no signal at all.
+    /// </summary>
+    [Fact]
+    public async Task AStatusMessageAfterAnErrorClearsTheErrorFlag()
+    {
+        var viewModel = await TrySetUpAsync("/does/not/exist.srt");
+        if (viewModel is null)
+        {
+            return;
+        }
+
+        await viewModel.ImportCommand.ExecuteAsync(null);
+        Assert.True(viewModel.IsStatusError);
+
+        await viewModel.LoadAsync();
+
+        Assert.False(viewModel.IsStatusError);
+    }
+
     public void Dispose()
     {
         try

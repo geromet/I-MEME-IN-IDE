@@ -1,5 +1,7 @@
 using MemeSearcher.Infrastructure.Alignment;
 using MemeSearcher.Infrastructure.Processes;
+using MemeSearcher.Infrastructure.Settings;
+using MemeSearcher.Tests.TestDoubles;
 
 namespace MemeSearcher.Tests.Alignment;
 
@@ -110,7 +112,8 @@ public class MfaAlignmentProviderTests
             return; // Can't exercise the "tool missing" path on a machine that has it.
         }
 
-        var provider = new MfaAlignmentProvider(locator);
+        var provider = new MfaAlignmentProvider(
+            locator, new InMemorySettingsStore(), new MfaSettings());
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(
             () => provider.AlignAsync("/some/media.wav", "hello world", CancellationToken.None));

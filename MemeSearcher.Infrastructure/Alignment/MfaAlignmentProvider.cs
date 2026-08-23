@@ -1,6 +1,8 @@
 using System.Diagnostics;
 using MemeSearcher.Core.Interfaces;
 using MemeSearcher.Core.Phonetics;
+using MemeSearcher.Core.Settings;
+using MemeSearcher.Infrastructure.Settings;
 using MemeSearcher.Infrastructure.Processes;
 
 namespace MemeSearcher.Infrastructure.Alignment;
@@ -18,7 +20,10 @@ namespace MemeSearcher.Infrastructure.Alignment;
 /// english_us_arpa`) - MFA does not auto-download these on first use. Language is hardcoded to
 /// en-US for now, matching the rest of the project's current "en-US only" scope.
 /// </summary>
-public class MfaAlignmentProvider(MfaToolLocator toolLocator) : IAlignmentProvider
+public class MfaAlignmentProvider(
+    MfaToolLocator toolLocator,
+    ISettingsStore settings,
+    MfaSettings mfaSettings) : IAlignmentProvider
 {
     public string ProviderName => "mfa";
 
@@ -26,14 +31,20 @@ public class MfaAlignmentProvider(MfaToolLocator toolLocator) : IAlignmentProvid
     // OW1) - a different alphabet from the IPA espeak writes onto the same Word (#18).
     public PhoneAlphabet? PhoneAlphabet => Core.Phonetics.PhoneAlphabet.Arpabet;
 
-    private const string DictionaryAndAcousticModel = "english_us_arpa";
-
     public async Task<AlignmentResult> AlignAsync(string mediaPath, string transcriptText, CancellationToken cancellationToken = default)
     {
         var status = await toolLocator.LocateAsync(cancellationToken);
         if (!status.IsInstalled)
         {
             throw new InvalidOperationException($"mfa is not available: {status.Error}");
+        }
+
+        // MFA does not download models on first use, so the default state after installing it is
+        // "no models" - and that failure only surfaces deep inside MFA. Check first, and say what
+        // to install.
+        if (mfaSettings.Validate(settings) is { } settingsError)
+        {
+            throw new InvalidOperationException(settingsError);
         }
 
         var corpusDir = Directory.CreateTempSubdirectory("memesearcher-mfa-corpus-").FullName;
@@ -47,7 +58,13 @@ public class MfaAlignmentProvider(MfaToolLocator toolLocator) : IAlignmentProvid
             LinkOrCopy(mediaPath, corpusMediaPath);
             await File.WriteAllTextAsync(corpusLabPath, transcriptText, cancellationToken);
 
-            await RunMfaAsync(status, corpusDir, outputDir, cancellationToken);
+            await RunMfaAsync(
+                status,
+                corpusDir,
+                outputDir,
+                dictionary: settings.Get(mfaSettings.DictionarySetting),
+                acousticModel: settings.Get(mfaSettings.AcousticModelSetting),
+                cancellationToken);
 
             var textGridPath = Path.Combine(outputDir, baseName + ".TextGrid");
             if (!File.Exists(textGridPath))
@@ -108,7 +125,12 @@ public class MfaAlignmentProvider(MfaToolLocator toolLocator) : IAlignmentProvid
     }
 
     private static async Task RunMfaAsync(
-        ExternalToolStatus status, string corpusDir, string outputDir, CancellationToken cancellationToken)
+        ExternalToolStatus status,
+        string corpusDir,
+        string outputDir,
+        string dictionary,
+        string acousticModel,
+        CancellationToken cancellationToken)
     {
         var startInfo = new ProcessStartInfo(status.ExecutablePath!)
         {
@@ -118,8 +140,12 @@ public class MfaAlignmentProvider(MfaToolLocator toolLocator) : IAlignmentProvid
         };
         startInfo.ArgumentList.Add("align");
         startInfo.ArgumentList.Add(corpusDir);
-        startInfo.ArgumentList.Add(DictionaryAndAcousticModel);
-        startInfo.ArgumentList.Add(DictionaryAndAcousticModel);
+        // `mfa align CORPUS DICTIONARY ACOUSTIC OUTPUT` - the dictionary comes first. This was
+        // one constant passed twice before, so the order never mattered; with two independent
+        // settings it does, and swapping them produces a confusing model-not-found for whichever
+        // name lands in the wrong slot.
+        startInfo.ArgumentList.Add(dictionary);
+        startInfo.ArgumentList.Add(acousticModel);
         startInfo.ArgumentList.Add(outputDir);
         startInfo.ArgumentList.Add("--clean");
 
@@ -132,9 +158,50 @@ public class MfaAlignmentProvider(MfaToolLocator toolLocator) : IAlignmentProvid
         if (process.ExitCode != 0)
         {
             var stderr = await stderrTask;
-            throw new InvalidOperationException($"mfa exited with code {process.ExitCode}: {stderr}");
+            throw new InvalidOperationException(
+                $"mfa exited with code {process.ExitCode}: {SummarizeMfaError(stderr)}");
         }
     }
+
+    /// <summary>
+    /// Reduces MFA's error output to the sentence that matters.
+    ///
+    /// MFA renders errors as a Unicode box - border characters, padding, blank lines - which is
+    /// fine in a terminal and unreadable anywhere else. Passed through verbatim it becomes dozens
+    /// of lines of box-drawing in a one-line status bar, which is how a perfectly clear
+    /// "Could not find a model named ..." ends up looking like nothing happened at all.
+    /// </summary>
+    public static string SummarizeMfaError(string stderr)
+    {
+        var lines = stderr.Split('\n').Select(line => line.TrimEnd()).ToList();
+
+        // MFA prints a usage banner *and* an error box. Only the box says what went wrong, so
+        // find it rather than concatenating everything - the banner is longer than the message
+        // and would bury it.
+        var boxStart = lines.FindIndex(line => line.TrimStart().StartsWith('\u256d') && line.Contains("Error"));
+
+        if (boxStart >= 0)
+        {
+            var boxed = lines
+                .Skip(boxStart + 1)
+                .TakeWhile(line => !line.TrimStart().StartsWith('\u2570'))
+                .Select(StripBorders)
+                .Where(line => line.Length > 0);
+
+            var message = string.Join(" ", boxed);
+            if (message.Length > 0)
+            {
+                return message;
+            }
+        }
+
+        var fallback = lines.Select(StripBorders).Where(line => line.Length > 0).ToList();
+
+        return fallback.Count > 0 ? string.Join(" ", fallback) : "no error output";
+    }
+
+    private static string StripBorders(string line) =>
+        line.Trim().Trim('\u2502', '\u256d', '\u2570', '\u256e', '\u256f', '\u2500').Trim();
 
     private static void TryDelete(string dir)
     {

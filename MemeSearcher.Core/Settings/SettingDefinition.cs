@@ -10,6 +10,13 @@ public enum SettingKind
     Text,
     Choice,
     Toggle,
+
+    /// <summary>
+    /// Read-only guidance rendered in place, with no editor. For telling the user what the app
+    /// found on their machine and what to do about it - the sort of thing that otherwise ends up
+    /// only in a failure message, after the failure.
+    /// </summary>
+    Info,
 }
 
 /// <summary>One selectable value of a <see cref="SettingKind.Choice"/> setting.</summary>
@@ -39,10 +46,43 @@ public record SettingDefinition(
     IReadOnlyList<SettingChoice>? Choices = null)
 {
     /// <summary>
+    /// Choices discovered at runtime rather than known at compile time - what is installed on this
+    /// machine, for instance. Evaluated on each read, so the list reflects reality now rather than
+    /// whenever the app started.
+    /// </summary>
+    public Func<IReadOnlyList<SettingChoice>>? ChoicesProvider { get; init; }
+
+    /// <summary>Description computed at read time, for guidance that depends on machine state.</summary>
+    public Func<string>? DynamicDescription { get; init; }
+
+    /// <summary>
+    /// Default computed at read time. For settings whose sensible default depends on the machine -
+    /// which models are installed, what other settings say - rather than being knowable when the
+    /// definition is written. A provider must not read its own setting, or resolving the default
+    /// recurses.
+    /// </summary>
+    public Func<string>? DefaultValueProvider { get; init; }
+
+    /// <summary>The default a store should fall back to. Always use this rather than <see cref="DefaultValue"/>.</summary>
+    public string EffectiveDefault => DefaultValueProvider?.Invoke() ?? DefaultValue;
+
+    public IReadOnlyList<SettingChoice> EffectiveChoices => ChoicesProvider?.Invoke() ?? Choices ?? [];
+
+    public string EffectiveDescription => DynamicDescription?.Invoke() ?? Description;
+
+    /// <summary>
     /// Whether a value is acceptable for this setting in isolation. Cross-setting rules (a device
     /// and a compute type that are individually fine but invalid together) belong in
     /// <see cref="ISettingsCategory.Validate"/>, not here.
+    ///
+    /// Dynamic choices are deliberately not enforced: a stored value naming a model the user has
+    /// since uninstalled must survive being read back, so the category can say "that is not
+    /// installed, here is how to install it" instead of the store silently reverting to a default
+    /// and hiding what was chosen.
     /// </summary>
     public bool IsValidValue(string value) =>
-        Kind != SettingKind.Choice || Choices is null || Choices.Any(c => c.Value == value);
+        Kind != SettingKind.Choice
+        || ChoicesProvider is not null
+        || Choices is null
+        || Choices.Any(c => c.Value == value);
 }

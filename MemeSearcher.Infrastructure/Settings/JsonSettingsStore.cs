@@ -55,7 +55,7 @@ public class JsonSettingsStore : ISettingsStore
             }
         }
 
-        return definition.DefaultValue;
+        return definition.EffectiveDefault;
     }
 
     public void Set(SettingDefinition definition, string value)
@@ -71,7 +71,7 @@ public class JsonSettingsStore : ISettingsStore
         {
             oldValue = _values.TryGetValue(definition.Key, out var stored) && definition.IsValidValue(stored)
                 ? stored
-                : definition.DefaultValue;
+                : definition.EffectiveDefault;
 
             if (oldValue == value)
             {
