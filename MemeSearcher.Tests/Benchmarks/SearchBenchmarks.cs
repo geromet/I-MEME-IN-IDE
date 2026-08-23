@@ -37,6 +37,23 @@ namespace MemeSearcher.Tests.Benchmarks;
 /// ~19x the time); `composite` stays close to linear (~4.5x). This is why #9 scopes candidate
 /// generation to PhoneticSearchService only - composite doesn't have this problem yet, and #10
 /// owns its own algorithm.
+///
+/// **#9 result (2026-08-24, same machine, query "water", median of 3), also posted to issue #9**:
+/// candidate generation did *not* speed up `single` search.
+///
+///   media | single before | single after (indexed)
+///   ------|----------------|------------------------
+///     10  |          172ms |                   168ms (noise; longer queries went slightly slower)
+///    100  |       14,530ms |                15,247ms (~5% slower, consistent across all 3 queries)
+///
+/// Root cause: `SearchMediaAsync` allocates ~150MB per query at 100 media materializing every
+/// media's full transcript graph (Segments -> Words -> Phones) once per media, in parallel, per
+/// query - that allocation/loading cost, not the DP candidate generation narrows, is what scales
+/// superlinearly above. Candidate generation shrinks the DP step but adds a second per-media DB
+/// round-trip (the postings query) on top of the load that actually dominates, so it is a wash at
+/// best and a small regression at 100 media. Left wired into PhoneticSearchService anyway (the
+/// team's call, not assumed) - see issue #9 for the loading-cost investigation this motivates as a
+/// separate, later piece of work.
 /// </summary>
 [Trait("Category", "Benchmark")]
 public class SearchBenchmarks(ITestOutputHelper output) : IDisposable
@@ -106,6 +123,7 @@ public class SearchBenchmarks(ITestOutputHelper output) : IDisposable
         var single = new PhoneticSearchService(factory, phonemizer, new InMemoryQueryPhonemizationCache());
         var composite = new CompositeSearchService(factory, phonemizer, new InMemoryQueryPhonemizationCache());
 
+        output.WriteLine("-- before #9's index (candidate generation unavailable - full-stream scan) --");
         foreach (var query in Queries)
         {
             await MeasureAsync($"single   [{query}]", () =>
@@ -113,6 +131,27 @@ public class SearchBenchmarks(ITestOutputHelper output) : IDisposable
 
             await MeasureAsync($"composite[{query}]", () =>
                 composite.SearchAsync(query, "en-US", new SearchScope.AllIndexedMedia()).ContinueWith(t => (object)t.Result));
+        }
+
+        // #9: same corpus, same database, only the index is new - isolates candidate generation's
+        // effect from any other variable (a second independently-generated corpus, a different
+        // machine state, ...). composite is not re-measured: #9 deliberately does not wire
+        // candidate generation into CompositeSearchService (that's #10's problem), so there is
+        // nothing new to measure for it here.
+        var indexStopwatch = Stopwatch.StartNew();
+        var reindexSummary = await new PhoneNGramIndexService(factory).ReindexAllAsync();
+        indexStopwatch.Stop();
+
+        output.WriteLine(
+            $"index: {reindexSummary.PostingCount} postings across {reindexSummary.MediaCount} media, "
+            + $"built in {indexStopwatch.Elapsed.TotalSeconds:F1}s");
+        output.WriteLine($"database (with index): {DatabaseSizeMb():F1} MB");
+
+        output.WriteLine("-- after #9's index (candidate generation available) --");
+        foreach (var query in Queries)
+        {
+            await MeasureAsync($"single   [{query}]", () =>
+                single.SearchAsync(query, "en-US", new SearchScope.AllIndexedMedia()).ContinueWith(t => (object)t.Result));
         }
     }
 
