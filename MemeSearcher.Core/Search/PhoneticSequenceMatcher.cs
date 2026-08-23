@@ -26,6 +26,37 @@ public static class PhoneticSequenceMatcher
 {
     private enum Move : byte { Substitute, Delete, Insert }
 
+    /// <summary>
+    /// Re-applies FindLocalMinima's own "one best match per contiguous run" rule across match
+    /// spans gathered from *separate* FindMatches calls over adjoining regions of the same
+    /// candidate stream (#9's windowed candidate generation calls FindMatches once per window and
+    /// concatenates the results). Each call's own suppression only sees its own window, so a run
+    /// that straddles two windows would otherwise surface once per window instead of once overall -
+    /// this makes windowed output structurally comparable to a single full-stream call again.
+    /// Spans must already be in the same (full-stream) coordinate space.
+    /// </summary>
+    public static List<PhoneticMatchSpan> MergeAdjacentMatches(IEnumerable<PhoneticMatchSpan> matches)
+    {
+        var merged = new List<PhoneticMatchSpan>();
+
+        foreach (var match in matches.OrderBy(m => m.Start))
+        {
+            if (merged.Count > 0 && match.Start <= merged[^1].End)
+            {
+                if (match.Cost < merged[^1].Cost)
+                {
+                    merged[^1] = match;
+                }
+
+                continue;
+            }
+
+            merged.Add(match);
+        }
+
+        return merged;
+    }
+
     public static IReadOnlyList<PhoneticMatchSpan> FindMatches(
         IReadOnlyList<PhoneToken> query,
         IReadOnlyList<PhoneToken> candidate,

@@ -20,31 +20,49 @@ public static class PhoneNGramCandidateGenerator
     }
 
     /// <summary>
-    /// How close (in <see cref="PhonemeFeatureTable.NearbySymbols"/>'s normalized [0, 1.25] scale)
-    /// a single-position substitution must be to expand into. Deliberately the "very close" band a
-    /// voicing-only pair like s/z falls into (PhonemeFeatureTableTests pins that below 0.3), not
-    /// PhoneticSearchOptions.SubstitutionMaxCost's full budget: that budget is spent once per
-    /// match, across every position, by the matcher itself, so reusing the whole thing here would
-    /// expand every trigram into essentially its entire same-class neighbourhood and stop this
-    /// being a filter at all.
-    /// </summary>
-    private const double FuzzyNeighborThreshold = 0.3;
-
-    /// <summary>
     /// Query n-grams, expanded with phonetically-similar variants so a query that differs from the
-    /// stored corpus by one near-miss phoneme still lands on an indexed trigram somewhere. Only one
-    /// position is varied at a time (not full combinatorial expansion across all three) - varying
-    /// every position at once chases similarity past the point the matcher's own per-substitution
-    /// cost would still call a match, and multiplies the variant count for no recall benefit.
+    /// stored corpus by one near-miss phoneme still lands on an indexed trigram somewhere.
+    ///
+    /// Only one position is varied at a time (not full combinatorial expansion across all three) -
+    /// deliberately, and this is a measured, known recall gap, not an oversight. A budget generous
+    /// enough to reach cross-class substitutions (see below) makes NearbySymbols return most of the
+    /// same-class alphabet - 72 of ~85 known symbols measured for a "water"-sized query's budget -
+    /// so two-position expansion would multiply that by itself per trigram and degenerate the index
+    /// into little more than a unigram lookup on the one fixed position, destroying the selectivity
+    /// (9-14% of a media's stream scanned, measured on #8's synthetic corpus) that is this
+    /// milestone's entire point. CandidateGenerationRecallTests measures the resulting gap directly:
+    /// a query whose *only* indexed trigram differs from every occurrence in the corpus by two
+    /// positions at once (not one) is missed - observed for one 4-phone single-word query
+    /// ("water" vs "mother"/"small", both needing two simultaneous substitutions) under
+    /// SimilarPhonetic/FuzzyPhonetic (3 of 25 results) and LoosePhonetic (1 of 10); a longer query
+    /// with more trigrams has more chances at least one is clean, and none of the tested longer
+    /// queries lost anything. That gap is accepted and pinned by the recall test, not silently
+    /// dropped - see the test file for the exact counts.
+    ///
+    /// Expands up to the *whole match's* accepted-cost budget
+    /// (<see cref="PhoneticSequenceMatcher.MaxAcceptableCost"/> for <paramref name="queryLength"/>),
+    /// not <see cref="PhoneticSearchOptions.SubstitutionMaxCost"/> itself. A single substitution
+    /// costing more than <c>SubstitutionMaxCost</c> is still real: cross-class (vowel/consonant)
+    /// substitutions cost <c>CrossClassMultiplier * SubstitutionMaxCost</c> (1.25x), and the
+    /// matcher can still accept an overall match that spends most of its budget on exactly one such
+    /// substitution as long as every other position is cheap. Excluding those from expansion
+    /// measurably lost real matches on #8's synthetic corpus in testing (see #9's recorded recall
+    /// numbers) - a short query especially has few trigrams to fall back on, so even one
+    /// wrongly-excluded substitution can sink the whole query. This costs selectivity - reported by
+    /// SearchBenchmarks/CandidateGenerationRecallTests rather than assumed - but #9 is explicit that
+    /// a speedup which silently drops matches is a regression, not an improvement, and a
+    /// selectivity loss is not.
     /// </summary>
-    public static HashSet<string> ExpandFuzzy(IEnumerable<string> exactNGrams, double maxSubstitutionCost)
+    public static HashSet<string> ExpandFuzzy(IEnumerable<string> exactNGrams, PhoneticSearchOptions options, int queryLength)
     {
         var expanded = new HashSet<string>(exactNGrams);
 
-        // Zero or infinite cost (ExactPhonetic mode, or a caller that disabled substitutions
+        var budget = PhoneticSequenceMatcher.MaxAcceptableCost(queryLength, options);
+
+        // Zero or infinite budget (ExactPhonetic mode, or a caller that disabled substitutions
         // outright) means no substitution is ever cheap enough to accept, so there is nothing
         // fuzzy to expand into.
-        if (maxSubstitutionCost <= 0 || double.IsPositiveInfinity(maxSubstitutionCost))
+        if (budget <= 0 || double.IsPositiveInfinity(budget))
         {
             return expanded;
         }
@@ -55,7 +73,7 @@ public static class PhoneNGramCandidateGenerator
 
             for (var position = 0; position < symbols.Length; position++)
             {
-                foreach (var neighbor in PhonemeFeatureTable.NearbySymbols(symbols[position], FuzzyNeighborThreshold))
+                foreach (var neighbor in PhonemeFeatureTable.NearbySymbols(symbols[position], budget))
                 {
                     var variant = (string[])symbols.Clone();
                     variant[position] = neighbor;

@@ -66,10 +66,14 @@ public class PhoneNGramCandidateGeneratorTests
         Assert.Equal(2, windows!.Count);
     }
 
+    private static readonly PhoneticSearchOptions SimilarOptions = PhoneticSearchOptions.ForMode(SearchMode.SimilarPhonetic);
+    private static readonly PhoneticSearchOptions ExactOptions = PhoneticSearchOptions.ForMode(SearchMode.ExactPhonetic);
+
     [Fact]
     public void ExpandFuzzy_AlwaysIncludesTheExactNGrams()
     {
-        var expanded = PhoneNGramCandidateGenerator.ExpandFuzzy([PhoneNGramIndexer.Join(["p", "æ", "t"])], 1.0);
+        var expanded = PhoneNGramCandidateGenerator.ExpandFuzzy(
+            [PhoneNGramIndexer.Join(["p", "æ", "t"])], SimilarOptions, queryLength: 10);
 
         Assert.Contains(PhoneNGramIndexer.Join(["p", "æ", "t"]), expanded);
     }
@@ -81,9 +85,35 @@ public class PhoneNGramCandidateGeneratorTests
         // one of the closest possible substitutions in the feature table.
         var exact = PhoneNGramIndexer.Join(["p", "æ", "t"]);
 
-        var expanded = PhoneNGramCandidateGenerator.ExpandFuzzy([exact], maxSubstitutionCost: 1.0);
+        var expanded = PhoneNGramCandidateGenerator.ExpandFuzzy([exact], SimilarOptions, queryLength: 10);
 
         Assert.Contains(PhoneNGramIndexer.Join(["b", "æ", "t"]), expanded);
+    }
+
+    [Fact]
+    public void ExpandFuzzy_AddsACrossClassVariantWhenTheQueryHasBudgetForOne()
+    {
+        // A cross-class (vowel/consonant) substitution costs more than SubstitutionMaxCost itself
+        // (CrossClassMultiplier), but a long-enough query's *overall* accepted-cost budget can
+        // still afford spending most of it on a single such substitution - expansion must not
+        // categorically rule these out, or a real match relying on one is unreachable (#9).
+        var exact = PhoneNGramIndexer.Join(["p", "æ", "t"]);
+
+        var expanded = PhoneNGramCandidateGenerator.ExpandFuzzy([exact], SimilarOptions, queryLength: 20);
+
+        Assert.Contains(exact.Replace('æ', 's'), expanded); // vowel -> consonant, cross-class
+    }
+
+    [Fact]
+    public void ExpandFuzzy_ZeroBudgetAddsNothing()
+    {
+        // MinimumScore = 1.0 with a short query leaves no room for any substitution at all.
+        var exact = PhoneNGramIndexer.Join(["p", "æ", "t"]);
+
+        var expanded = PhoneNGramCandidateGenerator.ExpandFuzzy(
+            [exact], SimilarOptions with { MinimumScore = 1.0 }, queryLength: 3);
+
+        Assert.Equal([exact], expanded);
     }
 
     [Fact]
@@ -93,7 +123,7 @@ public class PhoneNGramCandidateGeneratorTests
         // an "exact" search - expansion must be a no-op, not a lookup against an unusable threshold.
         var exact = PhoneNGramIndexer.Join(["p", "æ", "t"]);
 
-        var expanded = PhoneNGramCandidateGenerator.ExpandFuzzy([exact], double.PositiveInfinity);
+        var expanded = PhoneNGramCandidateGenerator.ExpandFuzzy([exact], ExactOptions, queryLength: 10);
 
         Assert.Equal([exact], expanded);
     }

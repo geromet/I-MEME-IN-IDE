@@ -155,7 +155,7 @@ public class PhoneticSearchService(
             .GroupBy(p => p.NGram)
             .ToDictionary(g => g.Key, IReadOnlyList<int> (g) => g.Select(p => p.StreamPosition).ToList());
 
-        var expandedNGrams = PhoneNGramCandidateGenerator.ExpandFuzzy(queryNGrams, options.SubstitutionMaxCost);
+        var expandedNGrams = PhoneNGramCandidateGenerator.ExpandFuzzy(queryNGrams, options, queryTokens.Count);
 
         // ExpandFuzzy only ever adds to a non-empty set (queryNGrams.Count > 0 was just checked),
         // so GenerateWindows cannot return null here - it can still return an empty list, meaning
@@ -166,9 +166,11 @@ public class PhoneticSearchService(
             candidateTokens.Count,
             padding: padding.Value)!;
 
-        return windows
-            .SelectMany(window => RunWindow(queryTokens, candidateTokens, window, options))
-            .ToList();
+        // Each window is its own FindMatches call with its own local-minima suppression, so a
+        // below-threshold run straddling two windows would otherwise surface once per window
+        // instead of the single match a full-stream call would report for it (#9).
+        var rawMatches = windows.SelectMany(window => RunWindow(queryTokens, candidateTokens, window, options));
+        return PhoneticSequenceMatcher.MergeAdjacentMatches(rawMatches);
     }
 
     private static IEnumerable<PhoneticMatchSpan> RunWindow(
