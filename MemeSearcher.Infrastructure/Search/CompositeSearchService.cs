@@ -1,4 +1,5 @@
 using MemeSearcher.Core.Interfaces;
+using MemeSearcher.Core.Models;
 using MemeSearcher.Core.Phonetics;
 using MemeSearcher.Core.Search;
 using MemeSearcher.Infrastructure.Database;
@@ -45,6 +46,16 @@ public class CompositeSearchService(
         }
 
         await using var context = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+
+        // Milestone 10 (#4/#10): fixed concatenation order can only stitch files in the order given
+        // to it, so a query that needs files in a different order than they were imported/created
+        // is invisible to it no matter how good a match it would be. Resolved *before* transcripts
+        // are loaded, off #9's n-gram postings, so a corpus with no matching index entries for this
+        // query costs one extra (usually empty) query rather than a wasted second DP pass.
+        var candidateOrder = options.UseCandidateOrdering
+            ? await ResolveCandidateOrderAsync(context, mediaIds, queryTokens, options, cancellationToken)
+            : null;
+
         var transcripts = await context.Transcripts
             .Where(t => mediaIds.Contains(t.MediaId))
             .Include(t => t.Segments)
@@ -57,7 +68,28 @@ public class CompositeSearchService(
             .ToListAsync(cancellationToken);
 
         var transcriptsByMedia = transcripts.ToLookup(t => t.MediaId);
-        var candidateStream = PhoneStreamBuilder.BuildComposite(mediaIds.Select(id => transcriptsByMedia[id]));
+
+        var results = RunPass(mediaIds, transcriptsByMedia, queryTokens, queryPhonemeCount, options);
+
+        // Only worth a second DP pass when there is a genuinely different, multi-file order to try -
+        // a single candidate media, or none at all, cannot produce a composite result on its own
+        // that the fixed-order pass above didn't already have the same chance to find.
+        if (candidateOrder is { Count: >= 2 })
+        {
+            results.AddRange(RunPass(candidateOrder, transcriptsByMedia, queryTokens, queryPhonemeCount, options));
+        }
+
+        return DeduplicateAndRank(results, options);
+    }
+
+    private static List<CompositeSearchResult> RunPass(
+        IReadOnlyList<Guid> mediaOrder,
+        ILookup<Guid, Transcript> transcriptsByMedia,
+        IReadOnlyList<PhoneToken> queryTokens,
+        int queryPhonemeCount,
+        PhoneticSearchOptions options)
+    {
+        var candidateStream = PhoneStreamBuilder.BuildComposite(mediaOrder.Select(id => transcriptsByMedia[id]));
         var candidateTokens = candidateStream.Select(e => e.Token).ToList();
 
         if (candidateTokens.Count == 0)
@@ -71,6 +103,114 @@ public class CompositeSearchService(
             .Select(match => ToCompositeResult(match, candidateStream, queryTokens, queryPhonemeCount, options))
             .Where(r => r is not null && r.OverallScore >= options.MinimumScore)
             .Select(r => r!)
+            .ToList();
+    }
+
+    /// <summary>
+    /// One additional media order to try, on top of the fixed one <see cref="ResolveMediaIdsAsync"/>
+    /// returns: sort every media that has *any* #9 candidate-n-gram evidence for this query by the
+    /// earliest query position that evidence corresponds to. A media whose only evidence is near the
+    /// query's start belongs early in the concatenation; one whose evidence is near the end belongs
+    /// late - which is exactly the ordering the "superman" split-across-files case needs regardless
+    /// of which file was imported/created first.
+    ///
+    /// Deliberately one derived ordering, not a search over permutations: bounding a permutation
+    /// count by MaxSourceFiles does not bound the number of *candidate* media to permute (a corpus
+    /// can have far more than MaxSourceFiles media with some evidence for a query), so trying every
+    /// ordering of them is combinatorial. This is O(candidates log candidates) instead.
+    ///
+    /// Returns null when candidate generation cannot help (no query n-grams, e.g. ExactPhonetic on
+    /// a 1-2 phoneme query) or fewer than two media have any evidence - in both cases there is
+    /// nothing for an alternate order to improve on and the caller falls back to the fixed order
+    /// alone, matching #9's own "can't filter, don't guess" rule for candidate generation.
+    /// </summary>
+    private static async Task<List<Guid>?> ResolveCandidateOrderAsync(
+        MemeSearcherDbContext context,
+        IReadOnlyList<Guid> mediaIds,
+        IReadOnlyList<PhoneToken> queryTokens,
+        PhoneticSearchOptions options,
+        CancellationToken cancellationToken)
+    {
+        var occurrences = PhoneNGramIndexer.Extract(queryTokens);
+        if (occurrences.Count == 0)
+        {
+            return null;
+        }
+
+        // Expanded per-occurrence (not once over the whole query, as PhoneticSearchService does),
+        // because an ordering needs to know *which query position* each matching variant came from -
+        // information a single merged expanded set would lose.
+        var variantToQueryPositions = new Dictionary<string, List<int>>();
+        foreach (var occurrence in occurrences)
+        {
+            foreach (var variant in PhoneNGramCandidateGenerator.ExpandFuzzy([occurrence.NGram], options, queryTokens.Count))
+            {
+                if (!variantToQueryPositions.TryGetValue(variant, out var positions))
+                {
+                    positions = [];
+                    variantToQueryPositions[variant] = positions;
+                }
+
+                positions.Add(occurrence.Position);
+            }
+        }
+
+        if (variantToQueryPositions.Count == 0)
+        {
+            return null;
+        }
+
+        var variants = variantToQueryPositions.Keys.ToList();
+        var postings = await context.PhoneNGramPostings
+            .Where(p => mediaIds.Contains(p.MediaId) && variants.Contains(p.NGram))
+            .Select(p => new { p.MediaId, p.NGram })
+            .ToListAsync(cancellationToken);
+
+        var minQueryPositionByMedia = new Dictionary<Guid, int>();
+        foreach (var posting in postings)
+        {
+            foreach (var position in variantToQueryPositions[posting.NGram])
+            {
+                if (!minQueryPositionByMedia.TryGetValue(posting.MediaId, out var existing) || position < existing)
+                {
+                    minQueryPositionByMedia[posting.MediaId] = position;
+                }
+            }
+        }
+
+        if (minQueryPositionByMedia.Count < 2)
+        {
+            return null;
+        }
+
+        return minQueryPositionByMedia
+            .OrderBy(kv => kv.Value)
+            .Select(kv => kv.Key)
+            .ToList();
+    }
+
+    /// <summary>
+    /// Trying more than one media order (see <see cref="ResolveCandidateOrderAsync"/>) can find the
+    /// same real match twice - identified by its exact source spans, not object identity, since each
+    /// pass builds its own <see cref="CompositeSearchResult"/>. Keeping the first-seen copy is
+    /// arbitrary but harmless: both copies score identically because they describe the same
+    /// candidate-stream slice.
+    /// </summary>
+    private static List<CompositeSearchResult> DeduplicateAndRank(List<CompositeSearchResult> results, PhoneticSearchOptions options)
+    {
+        var seen = new HashSet<string>();
+        var deduped = new List<CompositeSearchResult>();
+
+        foreach (var result in results)
+        {
+            var signature = string.Join('|', result.Components.Select(c => $"{c.MediaId}:{c.StartSeconds}:{c.EndSeconds}"));
+            if (seen.Add(signature))
+            {
+                deduped.Add(result);
+            }
+        }
+
+        return deduped
             .OrderByDescending(r => r.OverallScore)
             .ThenBy(r => r.Components.Count)
             .Take(options.MaxResults)

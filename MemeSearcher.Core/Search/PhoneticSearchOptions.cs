@@ -31,6 +31,16 @@ public record PhoneticSearchOptions
     /// <summary>A source contributing fewer phonemes than this to a composite result is treated as noise, not a real contribution (addendum §20).</summary>
     public int MinPhonemesPerSource { get; init; } = 2;
 
+    /// <summary>
+    /// Milestone 10 (#4/#10): besides the fixed import/CreatedAt order, also try one ordering of
+    /// the media that have any candidate n-gram evidence for the query, sorted by where in the
+    /// query that evidence falls - letting composite search find matches whose files were imported
+    /// in the "wrong" order for concatenation to stitch on its own. Kept switchable (rather than
+    /// replacing the fixed-order pass) so the two can be A/B compared on #8's benchmark harness and
+    /// so the fixed-order behaviour remains available as a fallback.
+    /// </summary>
+    public bool UseCandidateOrdering { get; init; } = true;
+
     public static PhoneticSearchOptions ForMode(SearchMode mode) => mode switch
     {
         SearchMode.ExactPhonetic => new PhoneticSearchOptions

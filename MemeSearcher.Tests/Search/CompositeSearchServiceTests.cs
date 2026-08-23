@@ -99,6 +99,53 @@ public class CompositeSearchServiceTests : IDisposable
         Assert.True(best.Components[0].QueryEnd <= best.Components[1].QueryStart + 1);
     }
 
+    /// <summary>
+    /// Milestone 10 / issue #4: the existing "AssemblesAResultFromTwoDifferentMediaFiles" test above
+    /// imports "super" before "man" - the same order the query needs, so fixed-order concatenation
+    /// already satisfies it and proves nothing about any-to-any stitching. Here the import order is
+    /// reversed ("man" first, "super" second) while the query still needs "super" before "man": fixed
+    /// concatenation can only try [man][super], which does not contain "superman", so finding this
+    /// match requires trying the other order too.
+    /// </summary>
+    [Fact]
+    public async Task SearchAsync_FindsAMatchRegardlessOfMediaImportOrder()
+    {
+        var setup = await TrySetUpAsync();
+        if (setup is null)
+        {
+            return;
+        }
+
+        var (service, phonemizer, factory) = setup.Value;
+
+        var mediaA = await ImportAsync(factory, phonemizer, _tempDir, "a.srt", """
+            1
+            00:00:10,000 --> 00:00:11,000
+            man
+
+            """);
+        var mediaB = await ImportAsync(factory, phonemizer, _tempDir, "b.srt", """
+            1
+            00:00:20,000 --> 00:00:21,000
+            super
+
+            """);
+
+        // The candidate ordering pass (#10) reads #9's n-gram index, which this test's own
+        // ImportAsync helper (unlike the real ingestion path) does not populate on its own.
+        await new Infrastructure.Search.PhoneNGramIndexService(factory).ReindexAllAsync();
+
+        var results = await service.SearchAsync("superman", "en-US", new SearchScope.AllIndexedMedia());
+
+        Assert.NotEmpty(results);
+        var best = results[0];
+        Assert.Equal(2, best.Components.Count);
+        Assert.Equal(mediaB, best.Components[0].MediaId);
+        Assert.Equal(mediaA, best.Components[1].MediaId);
+        Assert.Equal("super", best.Components[0].SourceText);
+        Assert.Equal("man", best.Components[1].SourceText);
+    }
+
     [Fact]
     public async Task SearchAsync_PrefersASingleFileMatchOverACompositeOneWhenBothExist()
     {

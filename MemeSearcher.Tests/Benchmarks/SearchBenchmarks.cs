@@ -68,6 +68,39 @@ namespace MemeSearcher.Tests.Benchmarks;
 /// implemented here) would be needed to measure it properly. Left wired into PhoneticSearchService
 /// per the team's call either way - the correctness exit criteria (persistence, reproducible
 /// reindex, measured recall) hold regardless of the speed result.
+///
+/// **#10 result (2026-08-24, same machine, median of 3), also posted to issue #4/#10** - a second
+/// concatenation order (media sorted by the earliest query position their #9 candidate evidence
+/// falls at, see CompositeSearchService.ResolveCandidateOrderAsync), tried alongside the existing
+/// fixed order, both DP'd, best result kept. This is a real, if costly, fix for issue #4 (verified
+/// by CompositeSearchServiceTests.SearchAsync_FindsAMatchRegardlessOfMediaImportOrder, which fixed
+/// concatenation alone cannot pass) - but it is not free, and got more expensive as both query
+/// length and corpus size grew, not less:
+///
+///   media | query                       | composite before | composite after | allocated before | allocated after
+///   ------|------------------------------|-------------------|-------------------|-------------------|------------------
+///    10   | water                        |              91ms |              91ms |            17.0MB |           24.6MB
+///    10   | another question             |             126ms |             126ms |            19.3MB |           27.2MB
+///    10   | important sentence together  |             135ms |             178ms |            20.6MB |           28.9MB
+///   100   | water                        |             693ms |             909ms |           158.8MB |          234.1MB
+///   100   | another question             |             861ms |            1264ms |           157.3MB |          234.8MB
+///   100   | important sentence together  |            1041ms |            1743ms |           159.2MB |          241.5MB
+///
+/// A regression, honestly: +31% to +67% wall-clock at 100 media, worse for longer queries, and a
+/// consistent ~45-55% allocation rise at every size. Two root causes, both traced rather than
+/// assumed: (1) ExpandFuzzy is called once per query n-gram *occurrence* here (not once over the
+/// merged set, as PhoneticSearchService does), because the ordering needs to keep track of which
+/// query position each expanded variant came from - a longer query has more occurrences, so this
+/// cost scales with query length by construction; (2) `SyntheticCorpusGenerator`'s shared 85-word
+/// vocabulary (#8) means nearly every one of the 100 media has *some* candidate evidence for a
+/// multi-word query, so the "candidates only" second stream ends up close to the same size as the
+/// first - paying for a whole second DP pass with little to no stream-narrowing benefit, the same
+/// homogeneity ceiling #9 hit. Left wired in (PhoneticSearchOptions.UseCandidateOrdering defaults
+/// to true) because #4's defect - fixed-order concatenation cannot find an any-to-any match at all,
+/// regardless of speed - is a correctness gap, not a performance one; UseCandidateOrdering exists
+/// specifically so this can be switched off, or the cost revisited, once a less homogeneous corpus
+/// makes the actual candidate-narrowing benefit measurable (see the project's accepted scaling
+/// roadmap: corpus diversity, DB swap, hashed/int keys).
 /// </summary>
 [Trait("Category", "Benchmark")]
 public class SearchBenchmarks(ITestOutputHelper output) : IDisposable
@@ -166,6 +199,12 @@ public class SearchBenchmarks(ITestOutputHelper output) : IDisposable
         {
             await MeasureAsync($"single   [{query}]", () =>
                 single.SearchAsync(query, "en-US", new SearchScope.AllIndexedMedia()).ContinueWith(t => (object)t.Result));
+
+            // #10: composite's ordering pass (CompositeSearchService.ResolveCandidateOrderAsync)
+            // only has anything to read once #9's index exists - measured here, not above, for the
+            // same reason single is measured both before and after.
+            await MeasureAsync($"composite[{query}]", () =>
+                composite.SearchAsync(query, "en-US", new SearchScope.AllIndexedMedia()).ContinueWith(t => (object)t.Result));
         }
     }
 
