@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using MemeSearcher.Core.Interfaces;
+using MemeSearcher.Core.Languages;
 using MemeSearcher.Core.Models;
 using MemeSearcher.Core.Search;
 using MemeSearcher.Infrastructure.Ffmpeg;
@@ -27,9 +28,10 @@ public partial class SearchViewModel(
     FFmpegClipExtractor clipExtractor,
     IFilePickerService filePicker) : ViewModelBase
 {
-    // No language selector yet (handoff §34 leaves room for one) - en-US is the only phonemizer
-    // language exercised so far.
-    private const string Language = "en-US";
+    // No language selector yet - that arrives with the settings surface (#24). Until then this
+    // reads the shared catalog default rather than holding its own literal, so it cannot drift
+    // from LibraryViewModel's the way two separate "en-US" constants did (#23).
+    private static string Language => LanguageCatalog.Default.Id;
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(SearchCommand))]

@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text.Json;
 using MemeSearcher.Core.Interfaces;
+using MemeSearcher.Core.Languages;
 using MemeSearcher.Infrastructure.Processes;
 
 namespace MemeSearcher.Infrastructure.Transcription;
@@ -29,10 +30,17 @@ public class WhisperXTranscriptionProvider(WhisperXToolLocator toolLocator) : IT
             throw new InvalidOperationException($"whisperx is not available: {status.Error}");
         }
 
+        // whisperx takes ISO 639-1 codes and rejects region-qualified tags like "en-US" via
+        // argparse `choices` - the run dies before any audio is read (#23). Resolve the neutral id
+        // to whisperx's own code here, and let an unknown id fail with a readable message rather
+        // than a wall of argparse output. A null language is left null: that is whisperx's
+        // documented "detect the language" mode, not a missing value.
+        var whisperCode = language is null ? null : LanguageCatalog.Get(language).WhisperCode;
+
         var outputDir = Directory.CreateTempSubdirectory("memesearcher-whisperx-").FullName;
         try
         {
-            await RunWhisperXAsync(status.ExecutablePath!, mediaPath, language, outputDir, cancellationToken);
+            await RunWhisperXAsync(status.ExecutablePath!, mediaPath, whisperCode, outputDir, cancellationToken);
 
             var outputJsonPath = Path.Combine(outputDir, Path.GetFileNameWithoutExtension(mediaPath) + ".json");
             if (!File.Exists(outputJsonPath))
@@ -44,6 +52,8 @@ public class WhisperXTranscriptionProvider(WhisperXToolLocator toolLocator) : IT
             var json = await File.ReadAllTextAsync(outputJsonPath, cancellationToken);
             var segments = ParseSegments(json);
 
+            // Report back the neutral id, not whisperx's code - this value is stored on
+            // Transcript.Language and has to be resolvable through LanguageCatalog later.
             return new TranscriptionResult(language ?? "unknown", segments);
         }
         finally
@@ -126,7 +136,7 @@ public class WhisperXTranscriptionProvider(WhisperXToolLocator toolLocator) : IT
     }
 
     private static async Task RunWhisperXAsync(
-        string executablePath, string mediaPath, string? language, string outputDir, CancellationToken cancellationToken)
+        string executablePath, string mediaPath, string? whisperCode, string outputDir, CancellationToken cancellationToken)
     {
         var startInfo = new ProcessStartInfo(executablePath)
         {
@@ -145,10 +155,10 @@ public class WhisperXTranscriptionProvider(WhisperXToolLocator toolLocator) : IT
         startInfo.ArgumentList.Add("--compute_type");
         startInfo.ArgumentList.Add("float32");
 
-        if (!string.IsNullOrWhiteSpace(language))
+        if (!string.IsNullOrWhiteSpace(whisperCode))
         {
             startInfo.ArgumentList.Add("--language");
-            startInfo.ArgumentList.Add(language);
+            startInfo.ArgumentList.Add(whisperCode);
         }
 
         using var process = Process.Start(startInfo)

@@ -6,6 +6,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using MemeSearcher.Core.Languages;
 using MemeSearcher.Infrastructure.Library;
 using MemeSearcher.Services;
 
@@ -16,7 +17,10 @@ public partial class LibraryViewModel(
     MediaIngestionService ingestionService,
     IFilePickerService filePicker) : ViewModelBase
 {
-    private const string Language = "en-US";
+    // Shared with SearchViewModel via the catalog - a search must be phonemized with the same
+    // language the corpus was ingested with, so these two must never disagree (#23). A per-import
+    // selector arrives with #24.
+    private static string Language => LanguageCatalog.Default.Id;
 
     private static readonly HashSet<string> TranscriptExtensions = new(StringComparer.OrdinalIgnoreCase)
     {

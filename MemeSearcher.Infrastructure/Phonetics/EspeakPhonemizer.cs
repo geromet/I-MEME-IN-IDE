@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using MemeSearcher.Core.Interfaces;
+using MemeSearcher.Core.Languages;
 using MemeSearcher.Core.Phonetics;
 using MemeSearcher.Core.Transcripts;
 
@@ -17,10 +18,11 @@ public class EspeakPhonemizer(IExternalToolLocator toolLocator) : IPhonemizer
 {
     public string ProviderName => "espeak-ng";
 
-    // Not exhaustive - espeak-ng supports far more. This is a starting set; `espeak-ng --voices`
-    // could enumerate the full list dynamically if/when that's actually needed.
-    public IReadOnlyCollection<string> SupportedLanguages { get; } =
-        ["en-us", "en-gb", "nl", "de", "fr-fr", "es", "it", "pt", "ru", "ja"];
+    // The neutral ids from LanguageCatalog, not espeak voice names - callers pass ids and this
+    // class maps to a voice at invocation time (#23). espeak-ng supports far more voices than
+    // this; the catalog is deliberately limited to languages whisperx also supports, since both
+    // halves of the pipeline have to work for a language to be usable.
+    public IReadOnlyCollection<string> SupportedLanguages => LanguageCatalog.SupportedIds;
 
     public async Task<PhonemizationResult> PhonemizeAsync(string text, string language, CancellationToken cancellationToken = default)
     {
@@ -36,7 +38,11 @@ public class EspeakPhonemizer(IExternalToolLocator toolLocator) : IPhonemizer
             throw new InvalidOperationException($"espeak-ng is not available: {status.Error}");
         }
 
-        var wordGroups = await RunEspeakAsync(status.ExecutablePath!, language, string.Join(' ', words), cancellationToken);
+        // Resolve before spawning: an unknown id here is a clear error, whereas an unknown voice
+        // name reaches espeak-ng and comes back as a silent fallback to the default voice.
+        var voice = LanguageCatalog.Get(language).EspeakVoice;
+
+        var wordGroups = await RunEspeakAsync(status.ExecutablePath!, voice, string.Join(' ', words), cancellationToken);
 
         var phonemizedWords = BuildPhonemizedWords(words, wordGroups);
 
@@ -77,7 +83,7 @@ public class EspeakPhonemizer(IExternalToolLocator toolLocator) : IPhonemizer
 
     private static async Task<string[]> RunEspeakAsync(
         string executablePath,
-        string language,
+        string voice,
         string inputLine,
         CancellationToken cancellationToken)
     {
@@ -89,7 +95,7 @@ public class EspeakPhonemizer(IExternalToolLocator toolLocator) : IPhonemizer
             UseShellExecute = false,
         };
         startInfo.ArgumentList.Add("-v");
-        startInfo.ArgumentList.Add(language);
+        startInfo.ArgumentList.Add(voice);
         startInfo.ArgumentList.Add("--ipa");
         startInfo.ArgumentList.Add("-q");
         startInfo.ArgumentList.Add("--sep=_");
