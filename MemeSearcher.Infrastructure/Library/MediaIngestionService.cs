@@ -133,80 +133,86 @@ public class MediaIngestionService(
 
         var phoneAlphabet = ValidateDeclaredAlphabet(alignment);
 
+        // Join by word identity, not by bucketing into segment time ranges and trusting equal
+        // counts (#30). Flattened across segments because the aligner was given the whole
+        // transcript as one text and produces one continuous word sequence - segment boundaries
+        // are the transcriber's, not the aligner's, and joining on them is what let a one-word
+        // shift through.
+        var transcriptWords = orderedSegments
+            .SelectMany(segment => segment.Words.OrderBy(w => w.Sequence))
+            .ToList();
+
+        var correspondences = WordSequenceAligner.Align(
+            transcriptWords.Select(w => w.Text).ToList(),
+            alignment.Words.Select(w => w.Text).ToList());
+
         var updatedWordCount = 0;
         var updatedPhoneCount = 0;
 
-        foreach (var segment in orderedSegments)
+        foreach (var (transcriptIndex, alignedIndex) in correspondences)
         {
-            var segmentWords = segment.Words.OrderBy(w => w.Sequence).ToList();
+            var word = transcriptWords[transcriptIndex];
+            var aligned = alignment.Words[alignedIndex];
 
-            // Bucket aligned words by which segment's time range they fall in. Only apply when
-            // the count matches this segment's own word split - same "don't guess on mismatch"
-            // discipline as BuildWords' interpolation fallback (handoff §49/§50).
-            var wordsInRange = alignment.Words
-                .Where(w => w.StartSeconds >= segment.StartSeconds && w.StartSeconds < segment.EndSeconds)
-                .OrderBy(w => w.StartSeconds)
-                .ToList();
+            word.StartSeconds = aligned.StartSeconds;
+            word.EndSeconds = aligned.EndSeconds;
+            updatedWordCount++;
 
-            if (wordsInRange.Count != segmentWords.Count)
+            if (alignment.Phones is null)
             {
                 continue;
             }
 
-            for (var i = 0; i < segmentWords.Count; i++)
+            // Both spans come from the same aligner, so bucketing phones by the aligned word's own
+            // range is exact rather than approximate.
+            var phonesInWord = alignment.Phones
+                .Where(p => p.StartSeconds >= aligned.StartSeconds && p.StartSeconds < aligned.EndSeconds)
+                .OrderBy(p => p.StartSeconds)
+                .ToList();
+
+            if (phonesInWord.Count == 0)
             {
-                segmentWords[i].StartSeconds = wordsInRange[i].StartSeconds;
-                segmentWords[i].EndSeconds = wordsInRange[i].EndSeconds;
-                updatedWordCount++;
-
-                if (alignment.Phones is null)
-                {
-                    continue;
-                }
-
-                var phonesInWord = alignment.Phones
-                    .Where(p => p.StartSeconds >= segmentWords[i].StartSeconds && p.StartSeconds < segmentWords[i].EndSeconds)
-                    .OrderBy(p => p.StartSeconds)
-                    .ToList();
-
-                if (phonesInWord.Count == 0)
-                {
-                    continue;
-                }
-
-                // Replace any existing (sparse/placeholder) phone rows for this word.
-                dbContext.Phones.RemoveRange(segmentWords[i].Phones);
-                segmentWords[i].Phones.Clear();
-
-                var newPhones = phonesInWord.Select((p, seq) => new CoreModels.Phone
-                {
-                    Id = Guid.NewGuid(),
-                    WordId = segmentWords[i].Id,
-                    Sequence = seq,
-                    Symbol = p.Symbol,
-                    Alphabet = phoneAlphabet!.Value,
-                    StartSeconds = p.StartSeconds,
-                    EndSeconds = p.EndSeconds,
-                }).ToList();
-
-                // Added explicitly via the DbSet, NOT also through
-                // segmentWords[i].Phones.Add(...) - a new child entity discovered purely through
-                // a navigation collection on an already-tracked parent can get its EntityState
-                // inferred as Modified instead of Added when its key was assigned client-side (a
-                // real EF Core graph-tracking gotcha, not a hypothetical one: it reproduced as a
-                // DbUpdateConcurrencyException on every run until fixed this way). Doing both
-                // would double-insert each phone, since AddRange already tracks them as Added and
-                // EF's relationship fix-up populates the navigation collection on its own.
-                dbContext.Phones.AddRange(newPhones);
-
-                updatedPhoneCount += newPhones.Count;
+                continue;
             }
+
+            // Replace any existing (sparse/placeholder) phone rows for this word.
+            dbContext.Phones.RemoveRange(word.Phones);
+            word.Phones.Clear();
+
+            var newPhones = phonesInWord.Select((p, seq) => new CoreModels.Phone
+            {
+                Id = Guid.NewGuid(),
+                WordId = word.Id,
+                Sequence = seq,
+                Symbol = p.Symbol,
+                Alphabet = phoneAlphabet!.Value,
+                StartSeconds = p.StartSeconds,
+                EndSeconds = p.EndSeconds,
+            }).ToList();
+
+            // Added explicitly via the DbSet, NOT also through word.Phones.Add(...) - a new child
+            // entity discovered purely through a navigation collection on an already-tracked
+            // parent can get its EntityState inferred as Modified instead of Added when its key
+            // was assigned client-side (a real EF Core graph-tracking gotcha, not a hypothetical
+            // one: it reproduced as a DbUpdateConcurrencyException on every run until fixed this
+            // way). Doing both would double-insert each phone, since AddRange already tracks them
+            // as Added and EF's relationship fix-up populates the navigation collection on its own.
+            dbContext.Phones.AddRange(newPhones);
+
+            updatedPhoneCount += newPhones.Count;
         }
 
         media.UpdatedAt = DateTimeOffset.UtcNow;
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        return new RealignmentResult(updatedWordCount, updatedPhoneCount);
+        // Coverage of the *canonical* symbols, since that is what the matcher will actually see -
+        // reporting coverage of the native ARPABET/IPA forms would measure the wrong thing (#31).
+        var phonemeCoverage = PhonemeFeatureTable.CoverageOf(
+            alignment.Phones?.Select(p => PhoneAlphabetConverter.ToCanonical(p.Symbol, phoneAlphabet!.Value).Symbol)
+            ?? []);
+
+        return new RealignmentResult(
+            updatedWordCount, updatedPhoneCount, transcriptWords.Count, phonemeCoverage);
     }
 
     /// <summary>

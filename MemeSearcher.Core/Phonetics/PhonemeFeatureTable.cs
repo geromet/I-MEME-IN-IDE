@@ -32,6 +32,14 @@ public readonly record struct PhonemeFeature
     public bool IsDiphthong { get; init; }
 }
 
+/// <summary>How much of a phone sequence the feature table models (#31).</summary>
+public record PhonemeCoverage(int TotalPhones, int KnownPhones, IReadOnlyList<string> UnknownSymbols)
+{
+    public int UnknownPhones => TotalPhones - KnownPhones;
+
+    public double KnownPercent => TotalPhones == 0 ? 100 : 100.0 * KnownPhones / TotalPhones;
+}
+
 public static class PhonemeFeatureTable
 {
     private const double PlaceWeight = 0.4;
@@ -76,6 +84,20 @@ public static class PhonemeFeatureTable
         ["j"] = Consonant(ConsonantPlace.Palatal, ConsonantManner.Glide, voiced: true),
         ["w"] = Consonant(ConsonantPlace.Bilabial, ConsonantManner.Glide, voiced: true),
 
+        // Consonants outside the en-US inventory (#31). Added when the first Dutch corpus showed
+        // 32% of its phones scoring as unknown - including "r", which is absent only because the
+        // table had the English approximant "ɹ" and not the trill.
+        ["x"] = Consonant(ConsonantPlace.Velar, ConsonantManner.Fricative, voiced: false),
+        ["ɣ"] = Consonant(ConsonantPlace.Velar, ConsonantManner.Fricative, voiced: true),
+        ["r"] = Consonant(ConsonantPlace.Alveolar, ConsonantManner.Liquid, voiced: true),
+        ["ʋ"] = Consonant(ConsonantPlace.Labiodental, ConsonantManner.Glide, voiced: true),
+        ["ɥ"] = Consonant(ConsonantPlace.Palatal, ConsonantManner.Glide, voiced: true),
+        ["c"] = Consonant(ConsonantPlace.Palatal, ConsonantManner.Stop, voiced: false),
+        ["ɟ"] = Consonant(ConsonantPlace.Palatal, ConsonantManner.Stop, voiced: true),
+        ["ç"] = Consonant(ConsonantPlace.Palatal, ConsonantManner.Fricative, voiced: false),
+        ["β"] = Consonant(ConsonantPlace.Bilabial, ConsonantManner.Fricative, voiced: true),
+        ["ʁ"] = Consonant(ConsonantPlace.Velar, ConsonantManner.Fricative, voiced: true),
+
         // Vowels (monophthongs).
         ["iː"] = Vowel(VowelHeight.High, VowelBackness.Front, rounded: false, isLong: true),
         ["ɪ"] = Vowel(VowelHeight.MidHigh, VowelBackness.Front, rounded: false, isLong: false),
@@ -91,6 +113,30 @@ public static class PhonemeFeatureTable
         ["ɚ"] = Vowel(VowelHeight.Mid, VowelBackness.Central, rounded: false, isLong: false),
         ["ɐ"] = Vowel(VowelHeight.Low, VowelBackness.Central, rounded: false, isLong: false),
 
+        // Vowels outside the en-US inventory (#31). Note how many of these are length or rounding
+        // variants of vowels the table already had: "ɔ" was missing only because en-US uses "ɔː",
+        // and that near-miss shape is why the gap went unnoticed - the symbol looks covered.
+        ["a"] = Vowel(VowelHeight.Low, VowelBackness.Front, rounded: false, isLong: false),
+        ["aː"] = Vowel(VowelHeight.Low, VowelBackness.Front, rounded: false, isLong: true),
+        ["ɑ"] = Vowel(VowelHeight.Low, VowelBackness.Back, rounded: false, isLong: false),
+        ["ɔ"] = Vowel(VowelHeight.MidLow, VowelBackness.Back, rounded: true, isLong: false),
+        ["e"] = Vowel(VowelHeight.MidHigh, VowelBackness.Front, rounded: false, isLong: false),
+        ["eː"] = Vowel(VowelHeight.MidHigh, VowelBackness.Front, rounded: false, isLong: true),
+        ["ɛː"] = Vowel(VowelHeight.MidLow, VowelBackness.Front, rounded: false, isLong: true),
+        ["o"] = Vowel(VowelHeight.MidHigh, VowelBackness.Back, rounded: true, isLong: false),
+        ["oː"] = Vowel(VowelHeight.MidHigh, VowelBackness.Back, rounded: true, isLong: true),
+        ["i"] = Vowel(VowelHeight.High, VowelBackness.Front, rounded: false, isLong: false),
+        ["u"] = Vowel(VowelHeight.High, VowelBackness.Back, rounded: true, isLong: false),
+        ["y"] = Vowel(VowelHeight.High, VowelBackness.Front, rounded: true, isLong: false),
+        ["yː"] = Vowel(VowelHeight.High, VowelBackness.Front, rounded: true, isLong: true),
+        ["ʏ"] = Vowel(VowelHeight.MidHigh, VowelBackness.Front, rounded: true, isLong: false),
+        ["ø"] = Vowel(VowelHeight.MidHigh, VowelBackness.Front, rounded: true, isLong: false),
+        ["øː"] = Vowel(VowelHeight.MidHigh, VowelBackness.Front, rounded: true, isLong: true),
+        ["œ"] = Vowel(VowelHeight.MidLow, VowelBackness.Front, rounded: true, isLong: false),
+        ["œː"] = Vowel(VowelHeight.MidLow, VowelBackness.Front, rounded: true, isLong: true),
+        ["ɵ"] = Vowel(VowelHeight.Mid, VowelBackness.Central, rounded: true, isLong: false),
+        ["ɒ"] = Vowel(VowelHeight.Low, VowelBackness.Back, rounded: true, isLong: false),
+
         // Diphthongs - approximated by onset quality (handoff §14: heuristic, not a phonology claim).
         ["eɪ"] = Vowel(VowelHeight.MidHigh, VowelBackness.Front, rounded: false, isLong: false, isDiphthong: true),
         ["aɪ"] = Vowel(VowelHeight.Low, VowelBackness.Front, rounded: false, isLong: false, isDiphthong: true),
@@ -105,7 +151,74 @@ public static class PhonemeFeatureTable
     private static PhonemeFeature Vowel(VowelHeight height, VowelBackness backness, bool rounded, bool isLong, bool isDiphthong = false) =>
         new() { IsVowel = true, Height = height, Backness = backness, Rounded = rounded, Long = isLong, IsDiphthong = isDiphthong };
 
-    public static bool TryGetFeature(string symbol, out PhonemeFeature feature) => Features.TryGetValue(symbol, out feature);
+    /// <summary>
+    /// Looks up a symbol, falling back structurally when the exact form is absent.
+    ///
+    /// **Design decision (#31): curated table plus a structural fallback, not full derivation
+    /// from the IPA chart.** Deriving every feature from IPA structure would cover any language
+    /// for free, but the values here are empirically tuned against espeak's actual en-US output
+    /// and pinned by tests - a derivation would have to reproduce that behaviour before it could
+    /// replace it. So the table stays authoritative and is extended per language as real corpora
+    /// demand, and the fallback below removes the specific failure that made the English-only gap
+    /// invisible: symbols that differ from a known one only by a diacritic or a length mark used
+    /// to score as fully unknown, which looks like poor match quality rather than missing data.
+    ///
+    /// The fallback never invents features - it only reaches a neighbouring form of the same
+    /// vowel or consonant.
+    /// </summary>
+    public static bool TryGetFeature(string symbol, out PhonemeFeature feature)
+    {
+        if (Features.TryGetValue(symbol, out feature))
+        {
+            return true;
+        }
+
+        // Combining marks (centralization, nasalization) narrow a vowel rather than replace it -
+        // "ɛ̈" is an "ɛ". Dropping them is closer than treating the symbol as unknown.
+        var stripped = new string(symbol.Where(c => !IsCombiningMark(c)).ToArray());
+        if (stripped != symbol && Features.TryGetValue(stripped, out feature))
+        {
+            return true;
+        }
+
+        // Length is a feature, not an identity: try the other length form before giving up.
+        var toggled = stripped.EndsWith(LengthMark) ? stripped[..^1] : stripped + LengthMark;
+        return Features.TryGetValue(toggled, out feature);
+    }
+
+    private const char LengthMark = 'ː';
+
+    private static bool IsCombiningMark(char c) => c is >= '\u0300' and <= '\u036F';
+
+    /// <summary>
+    /// How much of a phone sequence this table can actually reason about (#31).
+    ///
+    /// Exists because the failure mode is silent: an unknown symbol is charged a flat penalty
+    /// rather than a phonetic distance, so a corpus the table does not cover reads as "search is
+    /// mediocre here" instead of "these phones are not modelled". Coverage has to be reportable
+    /// for that to be visible without inspecting the database.
+    /// </summary>
+    public static PhonemeCoverage CoverageOf(IEnumerable<string> symbols)
+    {
+        var total = 0;
+        var known = 0;
+        var unknown = new HashSet<string>();
+
+        foreach (var symbol in symbols)
+        {
+            total++;
+            if (TryGetFeature(symbol, out _))
+            {
+                known++;
+            }
+            else
+            {
+                unknown.Add(symbol);
+            }
+        }
+
+        return new PhonemeCoverage(total, known, unknown.Order().ToArray());
+    }
 
     /// <summary>
     /// Search-heuristic distance between two phoneme symbols, scaled to [0, maxCost].

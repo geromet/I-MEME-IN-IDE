@@ -213,7 +213,23 @@ public partial class LibraryViewModel(
         try
         {
             var result = await ingestionService.RealignAsync(row.Id);
-            StatusMessage = $"Realigned \"{row.Title}\": {result.UpdatedWordCount} word(s), {result.UpdatedPhoneCount} phone(s) updated.";
+            // Coverage, not just a count: an aligner routinely fails to place some words, and
+            // "1545 words" is meaningless without the denominator (#30).
+            // Two coverage numbers, because they fail independently: word coverage says how much
+            // of the transcript the aligner placed, phoneme coverage says how much of the result
+            // the matcher can actually reason about. A corpus can be perfectly aligned and still
+            // search badly because its phones are not modelled (#31), and that used to be
+            // invisible.
+            var coverage = result.PhonemeCoverage;
+            var phonemeNote = coverage.KnownPercent >= 99.5
+                ? ""
+                : $" {coverage.UnknownPhones} of {coverage.TotalPhones} phone(s) "
+                  + $"({100 - coverage.KnownPercent:F0}%) are not modelled by the phonetic matcher"
+                  + $" ({string.Join(" ", coverage.UnknownSymbols.Take(8))}) - search quality will suffer.";
+
+            StatusMessage =
+                $"Realigned \"{row.Title}\": {result.UpdatedWordCount} of {result.TotalWordCount} word(s) "
+                + $"({result.CoveragePercent:F0}%), {result.UpdatedPhoneCount} phone(s).{phonemeNote}";
         }
         catch (Exception ex)
         {
