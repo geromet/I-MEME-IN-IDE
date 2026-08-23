@@ -27,9 +27,20 @@ public class MfaAlignmentProvider(
 {
     public string ProviderName => "mfa";
 
-    // The english_us_arpa models this provider requires emit ARPABET with stress digits (HH, AH0,
-    // OW1) - a different alphabet from the IPA espeak writes onto the same Word (#18).
-    public PhoneAlphabet? PhoneAlphabet => Core.Phonetics.PhoneAlphabet.Arpabet;
+    /// <summary>
+    /// MFA's alphabet is a property of the *model*, not of MFA (#18). This was hardcoded to
+    /// ARPABET, which is true only for english_us_arpa - the one model whose name says so. The
+    /// _mfa and _cv model families emit IPA, so aligning Dutch with dutch_cv produced IPA phones
+    /// tagged ARPABET, and the detector correctly refused to store them.
+    ///
+    /// Derived from the model name because that is MFA's own naming convention, and validated by
+    /// the detector on write - so a model that breaks the convention fails loudly rather than
+    /// silently mis-tagging a corpus.
+    /// </summary>
+    public PhoneAlphabet? PhoneAlphabet =>
+        settings.Get(mfaSettings.AcousticModelSetting).EndsWith("_arpa", StringComparison.OrdinalIgnoreCase)
+            ? Core.Phonetics.PhoneAlphabet.Arpabet
+            : Core.Phonetics.PhoneAlphabet.Ipa;
 
     public async Task<AlignmentResult> AlignAsync(string mediaPath, string transcriptText, CancellationToken cancellationToken = default)
     {
