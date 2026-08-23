@@ -78,8 +78,8 @@ public class MediaIngestionServiceTests : IDisposable
         Assert.Equal("among", segment.Words[0].Text);
         Assert.Equal("us", segment.Words[1].Text);
         // Word timing should stay within the segment's cue bounds.
-        Assert.InRange(segment.Words[0].StartSeconds, segment.StartSeconds, segment.EndSeconds);
-        Assert.Equal(segment.EndSeconds, segment.Words[^1].EndSeconds, 3);
+        Assert.InRange(segment.Words[0].StartSeconds!.Value, segment.StartSeconds!.Value, segment.EndSeconds!.Value);
+        Assert.Equal(segment.EndSeconds!.Value, segment.Words[^1].EndSeconds!.Value, 3);
 
         // Phonemization results should now be persisted on both the segment and its words.
         Assert.False(string.IsNullOrWhiteSpace(segment.Ipa));

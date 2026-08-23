@@ -375,8 +375,8 @@ public class MediaIngestionService(
     private static List<CoreModels.Word> BuildWords(
         Guid segmentId,
         IReadOnlyList<PhonemizedWord> phonemizedWords,
-        double startSeconds,
-        double endSeconds,
+        double? startSeconds,
+        double? endSeconds,
         IReadOnlyList<ParsedWord>? realWords,
         PhoneAlphabet alphabet)
     {
@@ -385,10 +385,35 @@ public class MediaIngestionService(
             return [];
         }
 
-        return realWords is not null && realWords.Count == phonemizedWords.Count
-            ? BuildWordsFromRealTiming(segmentId, phonemizedWords, realWords, alphabet)
-            : BuildWordsFromInterpolation(segmentId, phonemizedWords, startSeconds, endSeconds, alphabet);
+        if (realWords is not null && realWords.Count == phonemizedWords.Count)
+        {
+            return BuildWordsFromRealTiming(segmentId, phonemizedWords, realWords, alphabet);
+        }
+
+        // Interpolation needs a span to divide up. A transcript with no timing at all has none, so
+        // its words keep null timing rather than being spread across a fabricated 0-to-0 range
+        // (#32) - there is nothing to interpolate, and inventing an answer is what made 83% of a
+        // corpus report a confident 00:00.
+        return startSeconds is { } start && endSeconds is { } end
+            ? BuildWordsFromInterpolation(segmentId, phonemizedWords, start, end, alphabet)
+            : BuildWordsWithoutTiming(segmentId, phonemizedWords, alphabet);
     }
+
+    private static List<CoreModels.Word> BuildWordsWithoutTiming(
+        Guid segmentId, IReadOnlyList<PhonemizedWord> phonemizedWords, PhoneAlphabet alphabet) =>
+        [.. phonemizedWords.Select((phonemizedWord, i) => new CoreModels.Word
+        {
+            Id = Guid.NewGuid(),
+            SegmentId = segmentId,
+            Sequence = i,
+            Text = phonemizedWord.Text,
+            NormalizedText = phonemizedWord.Text,
+            Ipa = phonemizedWord.Ipa,
+            PhonemeSequence = string.Join(' ', phonemizedWord.Phonemes),
+            PhonemeAlphabet = alphabet,
+            StartSeconds = null,
+            EndSeconds = null,
+        })];
 
     private static List<CoreModels.Word> BuildWordsFromRealTiming(
         Guid segmentId, IReadOnlyList<PhonemizedWord> phonemizedWords, IReadOnlyList<ParsedWord> realWords,

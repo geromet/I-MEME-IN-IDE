@@ -4,9 +4,9 @@ using MemeSearcher.Core.Transcripts;
 namespace MemeSearcher.Infrastructure.Transcription;
 
 /// <summary>
-/// Plain text has no timestamp information (handoff §23). Each non-blank line becomes a cue
-/// with Start == End == 0, a convention the UI/search layer must treat as "timing unknown" rather
-/// than a literal instant.
+/// Plain text has no timestamp information (handoff §23). Each non-blank line becomes a cue with
+/// null timing - not 0/0. The zero convention this class used to emit relied on every downstream
+/// layer remembering to reinterpret it, and none did (#32); a null is enforced by the compiler.
 /// </summary>
 public class PlainTextTranscriptParser : ITranscriptParser
 {
@@ -22,7 +22,7 @@ public class PlainTextTranscriptParser : ITranscriptParser
             .Split('\n')
             .Select(line => line.Trim())
             .Where(line => line.Length > 0)
-            .Select(line => new ParsedCue(0, 0, line))
+            .Select(line => new ParsedCue(null, null, line))
             .ToList();
 
         return new ParsedTranscript(FormatName, cues);

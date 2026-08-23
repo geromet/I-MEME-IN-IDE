@@ -20,8 +20,10 @@ public class Word
     /// <see cref="Phones"/>. Each carrier of phone data tags itself.
     /// </summary>
     public PhoneAlphabet PhonemeAlphabet { get; set; } = PhoneAlphabet.Ipa;
-    public double StartSeconds { get; set; }
-    public double EndSeconds { get; set; }
+    /// <summary>Null when no timing is known for this word (#32) - the transcript had none and no
+    /// alignment has placed it. Never a stand-in zero.</summary>
+    public double? StartSeconds { get; set; }
+    public double? EndSeconds { get; set; }
 
     public List<Phone> Phones { get; set; } = [];
 }

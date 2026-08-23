@@ -196,8 +196,8 @@ public class AlignedPhoneSearchTests : IDisposable
         var results = await searchService.SearchAsync("world", "en-US", new SearchScope.AllIndexedMedia());
 
         var match = Assert.Single(results);
-        Assert.Equal(1.7, match.StartSeconds, precision: 2);
-        Assert.Equal(3.0, match.EndSeconds, precision: 2);
+        Assert.Equal(1.7, match.StartSeconds!.Value, precision: 2);
+        Assert.Equal(3.0, match.EndSeconds!.Value, precision: 2);
     }
 
     /// <summary>

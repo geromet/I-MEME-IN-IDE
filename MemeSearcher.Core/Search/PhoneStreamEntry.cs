@@ -4,8 +4,8 @@ namespace MemeSearcher.Core.Search;
 /// One position in a media item's continuous phoneme stream (handoff §17), carrying provenance
 /// back to the word - and, for phoneme entries, the media - it came from, so a match span can be
 /// resolved to real timestamps, text, and (Milestone 4) which source file each part came from.
-/// Phone-level timing isn't populated yet (handoff §6: the Phone table can start sparse), so
-/// every phoneme within a word currently shares that word's Start/EndSeconds.
+/// Timing is nullable throughout: a phone falls back to its word's span when it has none of its
+/// own, and a word may have no timing at all when its transcript never had any (#32).
 /// </summary>
 public sealed record PhoneStreamEntry(
     PhoneToken Token,
@@ -21,6 +21,7 @@ public sealed record PhoneStreamEntry(
     public static PhoneStreamEntry CrossFileBoundary() => new(PhoneToken.CrossFileBoundary, null, null, null, null, null, null);
 
     public static PhoneStreamEntry Phoneme(
-        string symbol, Guid mediaId, Guid segmentId, Guid wordId, string wordText, double startSeconds, double endSeconds) =>
+        string symbol, Guid mediaId, Guid segmentId, Guid wordId, string wordText,
+        double? startSeconds, double? endSeconds) =>
         new(PhoneToken.Phoneme(symbol), mediaId, segmentId, wordId, wordText, startSeconds, endSeconds);
 }

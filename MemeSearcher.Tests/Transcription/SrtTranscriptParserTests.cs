@@ -26,12 +26,12 @@ public class SrtTranscriptParserTests
         Assert.Equal("srt", result.SourceFormat);
         Assert.Equal(2, result.Cues.Count);
 
-        Assert.Equal(1.0, result.Cues[0].StartSeconds, 3);
-        Assert.Equal(4.5, result.Cues[0].EndSeconds, 3);
+        Assert.Equal(1.0, result.Cues[0].StartSeconds!.Value, 3);
+        Assert.Equal(4.5, result.Cues[0].EndSeconds!.Value, 3);
         Assert.Equal("Hello world", result.Cues[0].Text);
 
-        Assert.Equal(5.0, result.Cues[1].StartSeconds, 3);
-        Assert.Equal(7.25, result.Cues[1].EndSeconds, 3);
+        Assert.Equal(5.0, result.Cues[1].StartSeconds!.Value, 3);
+        Assert.Equal(7.25, result.Cues[1].EndSeconds!.Value, 3);
         Assert.Equal("Second line wrapped onto two rows", result.Cues[1].Text);
     }
 

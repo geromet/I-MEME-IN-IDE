@@ -7,8 +7,8 @@ namespace MemeSearcher.Core.Search;
 /// </summary>
 public record CompositeMatchComponent(
     Guid MediaId,
-    double StartSeconds,
-    double EndSeconds,
+    double? StartSeconds,
+    double? EndSeconds,
     string SourceText,
     string Ipa,
     IReadOnlyList<string> Phonemes,

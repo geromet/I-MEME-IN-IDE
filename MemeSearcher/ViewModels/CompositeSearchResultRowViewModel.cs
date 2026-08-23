@@ -17,9 +17,16 @@ public class CompositeComponentRowViewModel(CompositeMatchComponent component, s
     public Guid MediaId { get; } = component.MediaId;
     public string? MediaPath { get; } = mediaPath;
     public string MediaTitle { get; } = mediaTitle;
-    public double StartSeconds { get; } = component.StartSeconds;
-    public double EndSeconds { get; } = component.EndSeconds;
-    public string TimeRangeDisplay { get; } = $"{FormatTimestamp(component.StartSeconds)} - {FormatTimestamp(component.EndSeconds)}";
+    public double? StartSeconds { get; } = component.StartSeconds;
+    public double? EndSeconds { get; } = component.EndSeconds;
+
+    /// <summary>Whether this component can be located in time (#32).</summary>
+    public bool HasTiming { get; } = component.StartSeconds is not null && component.EndSeconds is not null;
+
+    public string TimeRangeDisplay { get; } =
+        component.StartSeconds is { } start && component.EndSeconds is { } end
+            ? $"{FormatTimestamp(start)} - {FormatTimestamp(end)}"
+            : "no timing";
     public string SourceText { get; } = component.SourceText;
     public string Ipa { get; } = component.Ipa;
     public string ScoreDisplay { get; } = $"{component.Score:P0}";
@@ -83,7 +90,7 @@ public partial class CompositeSearchResultRowViewModel : ObservableObject
         ExportStatus = "Exporting assembled clip...";
 
         var result = await _clipExtractor.ExtractCompositeAsync(
-            Components.Select(c => (c.MediaPath!, c.StartSeconds, c.EndSeconds)).ToList(),
+            Components.Select(c => (c.MediaPath!, c.StartSeconds!.Value, c.EndSeconds!.Value)).ToList(),
             outputPath);
 
         ExportStatus = result.Success
@@ -91,5 +98,7 @@ public partial class CompositeSearchResultRowViewModel : ObservableObject
             : $"Export failed: {result.Error}";
     }
 
-    private bool CanExportClip() => Components.All(c => c.MediaPath is not null);
+    // Every component needs both a media file and real timing - an untimed component cannot
+    // contribute a clip, and assembling around it would silently drop part of the match (#32).
+    private bool CanExportClip() => Components.All(c => c.MediaPath is not null && c.HasTiming);
 }

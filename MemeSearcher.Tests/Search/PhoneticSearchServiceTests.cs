@@ -82,7 +82,7 @@ public class PhoneticSearchServiceTests : IDisposable
         var result = Assert.Single(results);
         Assert.Equal("a long bus", result.SourceText);
         Assert.True(result.Score > 0.5, $"expected a reasonably high score, got {result.Score}");
-        Assert.Equal(10.0, result.StartSeconds, 1);
+        Assert.Equal(10.0, result.StartSeconds!.Value, 1);
     }
 
     [Fact]

@@ -23,8 +23,17 @@ public partial class SearchResultRowViewModel : ObservableObject
     private readonly IFilePickerService _filePicker;
 
     public Guid MediaId { get; }
-    public double StartSeconds { get; }
-    public double EndSeconds { get; }
+
+    /// <summary>Null when this result's transcript carried no timing at all (#32).</summary>
+    public double? StartSeconds { get; }
+
+    public double? EndSeconds { get; }
+
+    /// <summary>
+    /// Whether this result can be located in time. Gates play, clip export and copy-timestamp -
+    /// all three previously operated on a stand-in zero and silently did the wrong thing.
+    /// </summary>
+    public bool HasTiming => StartSeconds is not null && EndSeconds is not null;
     public string ScoreDisplay { get; }
     public string TimeRangeDisplay { get; }
     public string SourceText { get; }
@@ -57,7 +66,11 @@ public partial class SearchResultRowViewModel : ObservableObject
         StartSeconds = result.StartSeconds;
         EndSeconds = result.EndSeconds;
         ScoreDisplay = $"{result.Score:P0}";
-        TimeRangeDisplay = $"{FormatTimestamp(result.StartSeconds)} - {FormatTimestamp(result.EndSeconds)}";
+        // Say "no timing" rather than printing 00:00 - a result from an untimed transcript is not
+        // a result at the start of the file, and rendering them identically is the bug (#32).
+        TimeRangeDisplay = result.StartSeconds is { } start && result.EndSeconds is { } end
+            ? $"{FormatTimestamp(start)} - {FormatTimestamp(end)}"
+            : "no timing";
         SourceText = result.SourceText;
         Ipa = result.Ipa;
         PhonemesDisplay = string.Join(' ', result.MatchPhonemes);
@@ -71,7 +84,7 @@ public partial class SearchResultRowViewModel : ObservableObject
             return;
         }
 
-        var result = await _playerLauncher.OpenAsync(MediaPath, StartSeconds);
+        var result = await _playerLauncher.OpenAsync(MediaPath, StartSeconds!.Value);
 
         PlaybackStatus = result switch
         {
@@ -82,7 +95,7 @@ public partial class SearchResultRowViewModel : ObservableObject
         };
     }
 
-    private bool CanPlay() => MediaPath is not null;
+    private bool CanPlay() => MediaPath is not null && HasTiming;
 
     [RelayCommand(CanExecute = nameof(CanExportClip))]
     private async Task ExportClipAsync()
@@ -102,17 +115,17 @@ public partial class SearchResultRowViewModel : ObservableObject
         }
 
         PlaybackStatus = "Exporting clip...";
-        var result = await _clipExtractor.ExtractAsync(MediaPath, StartSeconds, EndSeconds, outputPath);
+        var result = await _clipExtractor.ExtractAsync(MediaPath, StartSeconds!.Value, EndSeconds!.Value, outputPath);
 
         PlaybackStatus = result.Success
             ? $"Exported to {Path.GetFileName(outputPath)}."
             : $"Export failed: {result.Error}";
     }
 
-    private bool CanExportClip() => MediaPath is not null;
+    private bool CanExportClip() => MediaPath is not null && HasTiming;
 
-    [RelayCommand]
-    private Task CopyTimestampAsync() => _clipboard.SetTextAsync(FormatTimestamp(StartSeconds));
+    [RelayCommand(CanExecute = nameof(HasTiming))]
+    private Task CopyTimestampAsync() => _clipboard.SetTextAsync(FormatTimestamp(StartSeconds!.Value));
 
     [RelayCommand]
     private Task CopyTextAsync() => _clipboard.SetTextAsync(SourceText);
