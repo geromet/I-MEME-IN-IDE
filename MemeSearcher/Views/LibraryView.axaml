@@ -1,0 +1,61 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:MemeSearcher.ViewModels"
+             mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="550"
+             x:Class="MemeSearcher.Views.LibraryView"
+             x:DataType="vm:LibraryViewModel"
+             x:Name="Root">
+    <Grid Margin="16" RowDefinitions="Auto,Auto,*">
+        <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+            <TextBlock Grid.Column="0" Text="Library" FontSize="20" FontWeight="Bold" VerticalAlignment="Center" />
+            <Button Grid.Column="1" Content="Refresh" Command="{Binding LoadCommand}" />
+            <Button Grid.Column="2" Content="Add Media..." Command="{Binding ImportCommand}" />
+        </Grid>
+
+        <TextBlock Grid.Row="1" Margin="0,8,0,12" Text="{Binding StatusMessage}" Opacity="0.7" />
+
+        <ListBox Grid.Row="2" ItemsSource="{Binding Items}">
+            <ListBox.ItemTemplate>
+                <DataTemplate x:DataType="vm:MediaRowViewModel">
+                    <Border Padding="10" Margin="0,3" BorderThickness="1" BorderBrush="#33808080" CornerRadius="4">
+                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                            <StackPanel Grid.Column="0" Spacing="2">
+                                <TextBlock Text="{Binding Title}" FontSize="15" FontWeight="Bold" />
+                                <TextBlock Text="{Binding Path}" Opacity="0.6" FontFamily="monospace" FontSize="11" TextTrimming="CharacterEllipsis" />
+                                <StackPanel Orientation="Horizontal" Spacing="12">
+                                    <TextBlock Text="{Binding Language}" Opacity="0.7" />
+                                    <TextBlock Text="{Binding SegmentsDisplay}" Opacity="0.7" />
+                                    <TextBlock Text="{Binding PhonemeCoverageDisplay}" Opacity="0.7" />
+                                    <TextBlock Text="{Binding PlayableMediaDisplay}" Opacity="0.7" />
+                                    <TextBlock Text="{Binding ImportedAtDisplay}" Opacity="0.7" />
+                                </StackPanel>
+                            </StackPanel>
+
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                <Button Content="Remove from Library"
+                                        Command="{Binding #Root.((vm:LibraryViewModel)DataContext).RemoveFromLibraryCommand}"
+                                        CommandParameter="{Binding}"
+                                        IsVisible="{Binding !IsPendingDelete}" />
+                                <Button Content="Delete Source File..."
+                                        Command="{Binding #Root.((vm:LibraryViewModel)DataContext).DeleteSourceFileCommand}"
+                                        CommandParameter="{Binding}"
+                                        IsVisible="{Binding !IsPendingDelete}" />
+                                <Button Content="Confirm Delete?"
+                                        Background="DarkRed"
+                                        Command="{Binding #Root.((vm:LibraryViewModel)DataContext).DeleteSourceFileCommand}"
+                                        CommandParameter="{Binding}"
+                                        IsVisible="{Binding IsPendingDelete}" />
+                                <Button Content="Cancel"
+                                        Command="{Binding #Root.((vm:LibraryViewModel)DataContext).CancelDeleteCommand}"
+                                        CommandParameter="{Binding}"
+                                        IsVisible="{Binding IsPendingDelete}" />
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+    </Grid>
+</UserControl>

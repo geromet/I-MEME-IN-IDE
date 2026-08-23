@@ -1,0 +1,47 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:MemeSearcher.ViewModels"
+             mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="550"
+             x:Class="MemeSearcher.Views.SearchView"
+             x:DataType="vm:SearchViewModel">
+    <Grid Margin="16" RowDefinitions="Auto,Auto,Auto,*">
+        <Grid Grid.Row="0" ColumnDefinitions="*,Auto" ColumnSpacing="8">
+            <TextBox Grid.Column="0"
+                     Text="{Binding QueryText}"
+                     PlaceholderText="among us" />
+            <Button Grid.Column="1" Content="Find" Command="{Binding SearchCommand}" IsDefault="True" />
+        </Grid>
+
+        <TextBlock Grid.Row="1" Margin="0,8,0,0" Text="{Binding QueryIpa, StringFormat='IPA: {0}'}" />
+
+        <TextBlock Grid.Row="2" Margin="0,4,0,12" Text="{Binding StatusMessage}" Opacity="0.7" />
+
+        <ListBox Grid.Row="3" ItemsSource="{Binding Results}">
+            <ListBox.ItemTemplate>
+                <DataTemplate x:DataType="vm:SearchResultRowViewModel">
+                    <Border Padding="8" Margin="0,2" BorderThickness="0,0,0,1" BorderBrush="#33808080">
+                        <StackPanel Spacing="2">
+                            <StackPanel Orientation="Horizontal" Spacing="12">
+                                <TextBlock Text="{Binding ScoreDisplay}" FontWeight="Bold" />
+                                <TextBlock Text="{Binding TimeRangeDisplay}" Opacity="0.7" />
+                            </StackPanel>
+                            <TextBlock Text="{Binding SourceText}" FontSize="15" />
+                            <TextBlock Text="{Binding Ipa}" Opacity="0.6" FontFamily="monospace" />
+
+                            <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,4,0,0">
+                                <Button Content="▶ Play" Command="{Binding PlayCommand}" />
+                                <Button Content="Copy timestamp" Command="{Binding CopyTimestampCommand}" />
+                                <Button Content="Copy text" Command="{Binding CopyTextCommand}" />
+                                <Button Content="Copy IPA" Command="{Binding CopyIpaCommand}" />
+                                <Button Content="Copy phonemes" Command="{Binding CopyPhonemesCommand}" />
+                            </StackPanel>
+                            <TextBlock Text="{Binding PlaybackStatus}" Opacity="0.6" FontSize="11" />
+                        </StackPanel>
+                    </Border>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+    </Grid>
+</UserControl>
