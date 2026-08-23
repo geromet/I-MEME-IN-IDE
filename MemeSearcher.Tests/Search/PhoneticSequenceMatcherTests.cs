@@ -130,4 +130,32 @@ public class PhoneticSequenceMatcherTests
         var match = Assert.Single(matches);
         Assert.Equal(0, match.Cost);
     }
+
+    [Fact]
+    public void FindMatches_CrossFileBoundaryCostsMoreThanWordBoundary()
+    {
+        // Milestone 4: "super" + cross-file + "man" should cost more to align against a plain
+        // "superman" query than the same phonemes joined by an ordinary word boundary would.
+        var query = Phonemes("s", "uː", "p", "ə", "m", "æ", "n");
+
+        var withWordBoundary = new List<PhoneToken> { PhoneToken.Phoneme("s"), PhoneToken.Phoneme("uː"), PhoneToken.Phoneme("p"), PhoneToken.Phoneme("ə"), PhoneToken.Boundary, PhoneToken.Phoneme("m"), PhoneToken.Phoneme("æ"), PhoneToken.Phoneme("n") };
+        var withCrossFileBoundary = new List<PhoneToken> { PhoneToken.Phoneme("s"), PhoneToken.Phoneme("uː"), PhoneToken.Phoneme("p"), PhoneToken.Phoneme("ə"), PhoneToken.CrossFileBoundary, PhoneToken.Phoneme("m"), PhoneToken.Phoneme("æ"), PhoneToken.Phoneme("n") };
+
+        var wordBoundaryMatch = Assert.Single(PhoneticSequenceMatcher.FindMatches(query, withWordBoundary, DefaultOptions));
+        var crossFileMatch = Assert.Single(PhoneticSequenceMatcher.FindMatches(query, withCrossFileBoundary, DefaultOptions));
+
+        Assert.True(crossFileMatch.Cost > wordBoundaryMatch.Cost);
+        Assert.Equal(DefaultOptions.CrossFileTransitionCost - DefaultOptions.WordBoundaryCost, crossFileMatch.Cost - wordBoundaryMatch.Cost, precision: 6);
+    }
+
+    [Fact]
+    public void FindMatches_CorrespondencesMapQueryIndicesToCandidateIndices()
+    {
+        var query = Phonemes("s", "æ", "t");
+        var candidate = Phonemes("s", "æ", "t");
+
+        var match = Assert.Single(PhoneticSequenceMatcher.FindMatches(query, candidate, DefaultOptions));
+
+        Assert.Equal([(0, 0), (1, 1), (2, 2)], match.Correspondences);
+    }
 }

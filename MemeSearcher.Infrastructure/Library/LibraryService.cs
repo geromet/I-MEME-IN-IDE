@@ -76,6 +76,24 @@ public class LibraryService(IDbContextFactory<MemeSearcherDbContext> dbContextFa
     }
 
     /// <summary>
+    /// Resolves MediaId -> display title for a batch of results in one query - used to label
+    /// which source file each composite-result component came from (addendum §16/§22) with
+    /// something more legible than a raw GUID.
+    /// </summary>
+    public async Task<Dictionary<Guid, string>> GetTitlesAsync(IEnumerable<Guid> mediaIds, CancellationToken cancellationToken = default)
+    {
+        await using var context = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+
+        var ids = mediaIds.Distinct().ToList();
+        var media = await context.Media
+            .Where(m => ids.Contains(m.Id))
+            .Select(m => new { m.Id, m.Title, m.Path })
+            .ToListAsync(cancellationToken);
+
+        return media.ToDictionary(m => m.Id, m => m.Title ?? Path.GetFileName(m.Path));
+    }
+
+    /// <summary>
     /// Removing from the library vs. deleting the source file are explicitly distinct
     /// (addendum §29) - the caller must opt into deleting the actual file on disk.
     /// </summary>

@@ -2,7 +2,13 @@ using MemeSearcher.Core.Phonetics;
 
 namespace MemeSearcher.Core.Search;
 
-public record PhoneticMatchSpan(int Start, int End, double Cost);
+/// <summary>
+/// Correspondences records, for each Substitute step in the optimal alignment, the (0-based)
+/// query and candidate indices involved - insert/delete steps don't produce a pair, since they
+/// consume only one side. Composite search (Milestone 4) uses this to work out which part of the
+/// query each source file's contribution covers; single-source search ignores it.
+/// </summary>
+public record PhoneticMatchSpan(int Start, int End, double Cost, IReadOnlyList<(int QueryIndex, int CandidateIndex)> Correspondences);
 
 /// <summary>
 /// Approximate substring matching of a query phoneme sequence against a continuous candidate
@@ -82,43 +88,54 @@ public static class PhoneticSequenceMatcher
         var matches = new List<PhoneticMatchSpan>();
         var lastMatchEnd = -1;
 
+        // Find the single best (lowest-cost) ending position within each contiguous
+        // below-threshold run, rather than a pointwise 3-neighbor local-minimum check. A simple
+        // "here <= prev && here <= next" test locks onto the first shallow dip it sees - which is
+        // wrong whenever crossing a boundary token causes a small uptick partway through an
+        // otherwise-improving run (e.g. a cross-file transition cost), stranding the match well
+        // short of the true minimum a few positions further along the same run.
+        var runBestCost = double.PositiveInfinity;
+        var runBestEnd = -1;
+
         for (var j = 1; j <= m; j++)
         {
             var here = cost[n, j];
-            if (double.IsPositiveInfinity(here) || here > threshold)
+            var inRange = !double.IsPositiveInfinity(here) && here <= threshold;
+
+            if (inRange && here < runBestCost)
             {
-                continue;
+                runBestCost = here;
+                runBestEnd = j;
             }
 
-            var prev = cost[n, j - 1];
-            var next = j < m ? cost[n, j + 1] : double.PositiveInfinity;
-
-            var isLocalMinimum = here <= prev && here <= next;
-            if (!isLocalMinimum)
+            var runEnded = !inRange || j == m;
+            if (runEnded && runBestEnd != -1)
             {
-                continue;
-            }
+                var (start, correspondences) = Backtrace(move, n, runBestEnd);
+                if (start > lastMatchEnd)
+                {
+                    matches.Add(new PhoneticMatchSpan(start, runBestEnd, runBestCost, correspondences));
+                    lastMatchEnd = runBestEnd;
+                }
 
-            var start = Backtrace(move, n, j);
-            if (start <= lastMatchEnd)
-            {
-                continue; // Overlaps the previous match - skip rather than emit near-duplicates.
+                runBestCost = double.PositiveInfinity;
+                runBestEnd = -1;
             }
-
-            matches.Add(new PhoneticMatchSpan(start, j, here));
-            lastMatchEnd = j;
         }
 
         return matches;
     }
 
-    private static int Backtrace(Move[,] move, int i, int j)
+    private static (int Start, IReadOnlyList<(int QueryIndex, int CandidateIndex)> Correspondences) Backtrace(Move[,] move, int i, int j)
     {
+        var correspondences = new List<(int, int)>();
+
         while (i > 0)
         {
             switch (move[i, j])
             {
                 case Move.Substitute:
+                    correspondences.Add((i - 1, j - 1));
                     i--;
                     j--;
                     break;
@@ -131,7 +148,8 @@ public static class PhoneticSequenceMatcher
             }
         }
 
-        return j;
+        correspondences.Reverse();
+        return (j, correspondences);
     }
 
     private static double MaxAcceptableCost(int queryLength, PhoneticSearchOptions options)
@@ -161,10 +179,20 @@ public static class PhoneticSequenceMatcher
     }
 
     private static double InsertionCost(PhoneToken token, PhoneticSearchOptions options) =>
-        token.IsBoundary ? options.WordBoundaryCost : options.InsertionCost;
+        BoundaryCost(token, options) ?? options.InsertionCost;
 
     private static double DeletionCost(PhoneToken token, PhoneticSearchOptions options) =>
-        token.IsBoundary ? options.WordBoundaryCost : options.DeletionCost;
+        BoundaryCost(token, options) ?? options.DeletionCost;
+
+    private static double? BoundaryCost(PhoneToken token, PhoneticSearchOptions options)
+    {
+        if (token.IsCrossFileBoundary)
+        {
+            return options.CrossFileTransitionCost;
+        }
+
+        return token.IsBoundary ? options.WordBoundaryCost : null;
+    }
 
     private static (double Cost, Move Move) Min3(double c1, Move m1, double c2, Move m2, double c3, Move m3)
     {

@@ -16,6 +16,21 @@ public record PhoneticSearchOptions
     public double MinimumScore { get; init; } = 0.5;
     public int MaxResults { get; init; } = 25;
 
+    // Milestone 4 - composite (multi-file) search only.
+
+    /// <summary>
+    /// Cost of crossing from one source file to another - deliberately higher than
+    /// WordBoundaryCost (addendum §19) so results don't casually stitch together unrelated clips
+    /// when a single-file match would do.
+    /// </summary>
+    public double CrossFileTransitionCost { get; init; } = 0.5;
+
+    /// <summary>Composite results using more distinct source files than this are rejected (addendum §20).</summary>
+    public int MaxSourceFiles { get; init; } = 4;
+
+    /// <summary>A source contributing fewer phonemes than this to a composite result is treated as noise, not a real contribution (addendum §20).</summary>
+    public int MinPhonemesPerSource { get; init; } = 2;
+
     public static PhoneticSearchOptions ForMode(SearchMode mode) => mode switch
     {
         SearchMode.ExactPhonetic => new PhoneticSearchOptions

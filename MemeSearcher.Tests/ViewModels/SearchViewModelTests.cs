@@ -42,8 +42,9 @@ public class SearchViewModelTests : IDisposable
 
         var phonemizer = new EspeakPhonemizer(locator);
         var searchService = new Infrastructure.Search.PhoneticSearchService(dbContextFactory, phonemizer);
+        var compositeSearchService = new Infrastructure.Search.CompositeSearchService(dbContextFactory, phonemizer);
         var libraryService = new LibraryService(dbContextFactory);
-        var viewModel = new SearchViewModel(searchService, phonemizer, libraryService, new FakeMediaPlayerLauncher(), new FakeClipboardService());
+        var viewModel = new SearchViewModel(searchService, compositeSearchService, phonemizer, libraryService, new FakeMediaPlayerLauncher(), new FakeClipboardService());
 
         return (viewModel, dbContextFactory, phonemizer);
     }
@@ -118,6 +119,54 @@ public class SearchViewModelTests : IDisposable
     }
 
     [Fact]
+    public async Task SearchAsync_InCompositeMode_PopulatesCompositeResultsInsteadOfResults()
+    {
+        var setup = await TrySetUpAsync();
+        if (setup is null)
+        {
+            return;
+        }
+
+        var (viewModel, dbContextFactory, phonemizer) = setup.Value;
+
+        await ImportAsync(dbContextFactory, phonemizer, _tempDir, "a.srt", """
+            1
+            00:00:10,000 --> 00:00:11,000
+            super
+
+            """);
+        await ImportAsync(dbContextFactory, phonemizer, _tempDir, "b.srt", """
+            1
+            00:00:20,000 --> 00:00:21,000
+            man
+
+            """);
+
+        viewModel.IsCompositeMode = true;
+        viewModel.QueryText = "superman";
+        await viewModel.SearchCommand.ExecuteAsync(null);
+
+        Assert.Empty(viewModel.Results);
+        Assert.NotEmpty(viewModel.CompositeResults);
+        Assert.Equal(2, viewModel.CompositeResults[0].Components.Count);
+        // Titles, not raw GUIDs.
+        Assert.Equal("a.srt", viewModel.CompositeResults[0].Components[0].MediaTitle);
+        Assert.Equal("b.srt", viewModel.CompositeResults[0].Components[1].MediaTitle);
+    }
+
+    private static async Task ImportAsync(
+        IDbContextFactory<MemeSearcherDbContext> factory, EspeakPhonemizer phonemizer, string tempDir, string fileName, string srtBody)
+    {
+        var path = Path.Combine(tempDir, fileName);
+        await File.WriteAllTextAsync(path, srtBody);
+
+        var ingestion = new MediaIngestionService(
+            await factory.CreateDbContextAsync(), TranscriptParserFactory.CreateDefault(), phonemizer,
+            new UnusedTranscriptionProvider(), new MediaMetadataProbe(new FFprobeToolLocator()));
+        await ingestion.ImportAsync(new MediaIngestionRequest(null, path, "en-US"));
+    }
+
+    [Fact]
     public void SearchCommand_CannotExecuteWithEmptyQuery()
     {
         var locator = new EspeakToolLocator();
@@ -129,6 +178,7 @@ public class SearchViewModelTests : IDisposable
 
         var viewModel = new SearchViewModel(
             new Infrastructure.Search.PhoneticSearchService(dbContextFactory, phonemizer),
+            new Infrastructure.Search.CompositeSearchService(dbContextFactory, phonemizer),
             phonemizer,
             new LibraryService(dbContextFactory),
             new FakeMediaPlayerLauncher(),

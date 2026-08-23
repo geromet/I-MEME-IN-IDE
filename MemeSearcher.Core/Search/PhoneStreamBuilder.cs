@@ -20,8 +20,40 @@ public static class PhoneStreamBuilder
     public static List<PhoneStreamEntry> Build(IEnumerable<Transcript> transcripts)
     {
         var stream = new List<PhoneStreamEntry>();
-        var isFirstWord = true;
+        AppendTranscripts(stream, transcripts, isFirstWord: true);
+        return stream;
+    }
 
+    /// <summary>
+    /// Milestone 4: concatenates multiple *different* media's streams into one combined stream for
+    /// composite search, so the existing single-pass matcher can discover matches that span source
+    /// files. The seam between two media items is a CrossFileBoundary, not a plain word boundary -
+    /// separately priced (addendum §19) so same-file continuity stays cheap and cross-file jumps
+    /// cost more by default. Media order is the order given here; the matcher can only stitch
+    /// files together in that fixed order, not any arbitrary order - a true corpus graph allowing
+    /// any-to-any transitions is a documented follow-up, not implemented here.
+    /// </summary>
+    public static List<PhoneStreamEntry> BuildComposite(IEnumerable<IEnumerable<Transcript>> mediaTranscriptGroups)
+    {
+        var stream = new List<PhoneStreamEntry>();
+        var isFirstGroup = true;
+
+        foreach (var transcripts in mediaTranscriptGroups)
+        {
+            if (!isFirstGroup && stream.Count > 0)
+            {
+                stream.Add(PhoneStreamEntry.CrossFileBoundary());
+            }
+
+            AppendTranscripts(stream, transcripts, isFirstWord: true);
+            isFirstGroup = false;
+        }
+
+        return stream;
+    }
+
+    private static void AppendTranscripts(List<PhoneStreamEntry> stream, IEnumerable<Transcript> transcripts, bool isFirstWord)
+    {
         foreach (var transcript in transcripts.OrderBy(t => t.CreatedAt))
         {
             foreach (var segment in transcript.Segments.OrderBy(s => s.Sequence))
@@ -40,15 +72,14 @@ public static class PhoneStreamBuilder
 
                     foreach (var symbol in word.PhonemeSequence.Split(' ', StringSplitOptions.RemoveEmptyEntries))
                     {
-                        stream.Add(PhoneStreamEntry.Phoneme(symbol, segment.Id, word.Id, word.Text, word.StartSeconds, word.EndSeconds));
+                        stream.Add(PhoneStreamEntry.Phoneme(
+                            symbol, transcript.MediaId, segment.Id, word.Id, word.Text, word.StartSeconds, word.EndSeconds));
                     }
 
                     isFirstWord = false;
                 }
             }
         }
-
-        return stream;
     }
 
     /// <summary>

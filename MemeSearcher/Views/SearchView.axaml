@@ -6,7 +6,7 @@
              mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="550"
              x:Class="MemeSearcher.Views.SearchView"
              x:DataType="vm:SearchViewModel">
-    <Grid Margin="16" RowDefinitions="Auto,Auto,Auto,*">
+    <Grid Margin="16" RowDefinitions="Auto,Auto,Auto,Auto,*">
         <Grid Grid.Row="0" ColumnDefinitions="*,Auto" ColumnSpacing="8">
             <TextBox Grid.Column="0"
                      Text="{Binding QueryText}"
@@ -14,11 +14,15 @@
             <Button Grid.Column="1" Content="Find" Command="{Binding SearchCommand}" IsDefault="True" />
         </Grid>
 
-        <TextBlock Grid.Row="1" Margin="0,8,0,0" Text="{Binding QueryIpa, StringFormat='IPA: {0}'}" />
+        <CheckBox Grid.Row="1" Margin="0,6,0,0"
+                  Content="Composite (assemble from multiple clips)"
+                  IsChecked="{Binding IsCompositeMode}" />
 
-        <TextBlock Grid.Row="2" Margin="0,4,0,12" Text="{Binding StatusMessage}" Opacity="0.7" />
+        <TextBlock Grid.Row="2" Margin="0,8,0,0" Text="{Binding QueryIpa, StringFormat='IPA: {0}'}" />
 
-        <ListBox Grid.Row="3" ItemsSource="{Binding Results}">
+        <TextBlock Grid.Row="3" Margin="0,4,0,12" Text="{Binding StatusMessage}" Opacity="0.7" />
+
+        <ListBox Grid.Row="4" ItemsSource="{Binding Results}" IsVisible="{Binding !IsCompositeMode}">
             <ListBox.ItemTemplate>
                 <DataTemplate x:DataType="vm:SearchResultRowViewModel">
                     <Border Padding="8" Margin="0,2" BorderThickness="0,0,0,1" BorderBrush="#33808080">
@@ -38,6 +42,39 @@
                                 <Button Content="Copy phonemes" Command="{Binding CopyPhonemesCommand}" />
                             </StackPanel>
                             <TextBlock Text="{Binding PlaybackStatus}" Opacity="0.6" FontSize="11" />
+                        </StackPanel>
+                    </Border>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+
+        <ListBox Grid.Row="4" ItemsSource="{Binding CompositeResults}" IsVisible="{Binding IsCompositeMode}">
+            <ListBox.ItemTemplate>
+                <DataTemplate x:DataType="vm:CompositeSearchResultRowViewModel">
+                    <Border Padding="8" Margin="0,2" BorderThickness="0,0,0,1" BorderBrush="#33808080">
+                        <StackPanel Spacing="4">
+                            <StackPanel Orientation="Horizontal" Spacing="12">
+                                <TextBlock Text="{Binding ScoreDisplay}" FontWeight="Bold" />
+                                <TextBlock Text="{Binding SourceCountDisplay}" Opacity="0.7" />
+                            </StackPanel>
+
+                            <ItemsControl ItemsSource="{Binding Components}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:CompositeComponentRowViewModel">
+                                        <Border Padding="6" Margin="12,2,0,2" BorderThickness="1" BorderBrush="#22808080" CornerRadius="3">
+                                            <StackPanel Spacing="1">
+                                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                                    <TextBlock Text="{Binding MediaTitle}" FontWeight="Bold" FontSize="12" />
+                                                    <TextBlock Text="{Binding TimeRangeDisplay}" Opacity="0.7" FontSize="11" />
+                                                    <TextBlock Text="{Binding ScoreDisplay}" Opacity="0.7" FontSize="11" />
+                                                </StackPanel>
+                                                <TextBlock Text="{Binding SourceText}" FontSize="13" />
+                                                <TextBlock Text="{Binding Ipa}" Opacity="0.6" FontFamily="monospace" FontSize="11" />
+                                            </StackPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
                         </StackPanel>
                     </Border>
                 </DataTemplate>

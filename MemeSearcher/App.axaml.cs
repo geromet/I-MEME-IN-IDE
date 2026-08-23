@@ -70,6 +70,7 @@ public partial class App : Application
         services.AddSingleton<MediaMetadataProbe>();
 
         services.AddScoped<IPhoneticSearchService, PhoneticSearchService>();
+        services.AddScoped<ICompositeSearchService, CompositeSearchService>();
         services.AddScoped<LibraryService>();
 
         services.AddSingleton<IFilePickerService, AvaloniaFilePickerService>();

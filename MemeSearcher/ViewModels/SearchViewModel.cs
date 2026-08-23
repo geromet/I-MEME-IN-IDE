@@ -14,6 +14,7 @@ namespace MemeSearcher.ViewModels;
 
 public partial class SearchViewModel(
     IPhoneticSearchService searchService,
+    ICompositeSearchService compositeSearchService,
     IPhonemizer phonemizer,
     LibraryService libraryService,
     IMediaPlayerLauncher playerLauncher,
@@ -37,7 +38,13 @@ public partial class SearchViewModel(
     [ObservableProperty]
     private string _statusMessage = "Import media in the Library tab, then search.";
 
+    // Milestone 4: single-source is the default per addendum §17 - composite must be opt-in.
+    [ObservableProperty]
+    private bool _isCompositeMode;
+
     public ObservableCollection<SearchResultRowViewModel> Results { get; } = [];
+
+    public ObservableCollection<CompositeSearchResultRowViewModel> CompositeResults { get; } = [];
 
     [RelayCommand(CanExecute = nameof(CanSearch))]
     private async Task SearchAsync()
@@ -50,22 +57,14 @@ public partial class SearchViewModel(
             var phonemized = await phonemizer.PhonemizeAsync(QueryText, Language);
             QueryIpa = phonemized.Ipa;
 
-            var results = await searchService.SearchAsync(QueryText, Language, new SearchScope.AllIndexedMedia());
-            var mediaPaths = await libraryService.GetPathsAsync(results.Select(r => r.MediaId));
-
-            Results.Clear();
-            foreach (var result in results)
+            if (IsCompositeMode)
             {
-                var row = new SearchResultRowViewModel(result, playerLauncher, clipboard)
-                {
-                    MediaPath = mediaPaths.GetValueOrDefault(result.MediaId),
-                };
-                Results.Add(row);
+                await SearchCompositeAsync();
             }
-
-            StatusMessage = Results.Count > 0
-                ? $"{Results.Count} result(s)."
-                : "No matches found.";
+            else
+            {
+                await SearchSingleSourceAsync();
+            }
         }
         catch (Exception ex)
         {
@@ -75,6 +74,47 @@ public partial class SearchViewModel(
         {
             IsBusy = false;
         }
+    }
+
+    private async Task SearchSingleSourceAsync()
+    {
+        CompositeResults.Clear();
+
+        var results = await searchService.SearchAsync(QueryText, Language, new SearchScope.AllIndexedMedia());
+        var mediaPaths = await libraryService.GetPathsAsync(results.Select(r => r.MediaId));
+
+        Results.Clear();
+        foreach (var result in results)
+        {
+            var row = new SearchResultRowViewModel(result, playerLauncher, clipboard)
+            {
+                MediaPath = mediaPaths.GetValueOrDefault(result.MediaId),
+            };
+            Results.Add(row);
+        }
+
+        StatusMessage = Results.Count > 0
+            ? $"{Results.Count} result(s)."
+            : "No matches found.";
+    }
+
+    private async Task SearchCompositeAsync()
+    {
+        Results.Clear();
+
+        var results = await compositeSearchService.SearchAsync(QueryText, Language, new SearchScope.AllIndexedMedia());
+        var allMediaIds = results.SelectMany(r => r.Components.Select(c => c.MediaId)).Distinct();
+        var mediaTitles = await libraryService.GetTitlesAsync(allMediaIds);
+
+        CompositeResults.Clear();
+        foreach (var result in results)
+        {
+            CompositeResults.Add(new CompositeSearchResultRowViewModel(result, mediaTitles));
+        }
+
+        StatusMessage = CompositeResults.Count > 0
+            ? $"{CompositeResults.Count} composite result(s)."
+            : "No composite matches found.";
     }
 
     private bool CanSearch() => !IsBusy && !string.IsNullOrWhiteSpace(QueryText);
