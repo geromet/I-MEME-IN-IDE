@@ -3,6 +3,7 @@ using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using MemeSearcher.Core.Interfaces;
+using MemeSearcher.Infrastructure.Alignment;
 using MemeSearcher.Infrastructure.Database;
 using MemeSearcher.Infrastructure.Ffmpeg;
 using MemeSearcher.Infrastructure.Library;
@@ -66,9 +67,14 @@ public partial class App : Application
         // directly instead.
         services.AddSingleton<WhisperXToolLocator>();
         services.AddSingleton<ITranscriptionProvider, WhisperXTranscriptionProvider>();
-        // Milestone 5: standalone alignment provider (not yet wired into MediaIngestionService's
-        // file-transcript path - see issue tracking for why). Registered so it's available/testable.
-        services.AddSingleton<IAlignmentProvider, WhisperXAlignmentProvider>();
+        // Milestone 6: MFA is the default IAlignmentProvider consumed by
+        // MediaIngestionService.RealignAsync, since it's the provider that can produce phone-level
+        // timing (addendum §6) - WhisperXAlignmentProvider (Milestone 5, word-level only) stays
+        // registered as its own concrete type so it's still available/testable, but no longer
+        // claims the shared interface slot.
+        services.AddSingleton<WhisperXAlignmentProvider>();
+        services.AddSingleton<MfaToolLocator>();
+        services.AddSingleton<IAlignmentProvider, MfaAlignmentProvider>();
         services.AddSingleton<FFprobeToolLocator>();
         services.AddSingleton<MediaMetadataProbe>();
         services.AddSingleton<FFmpegToolLocator>();

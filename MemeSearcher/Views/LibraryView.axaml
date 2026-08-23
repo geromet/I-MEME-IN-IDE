@@ -35,6 +35,12 @@
                             </StackPanel>
 
                             <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                                <Button Content="Realign (MFA)"
+                                        Command="{Binding #Root.((vm:LibraryViewModel)DataContext).RealignCommand}"
+                                        CommandParameter="{Binding}"
+                                        IsVisible="{Binding HasPlayableMedia}"
+                                        IsEnabled="{Binding !IsRealigning}"
+                                        ToolTip.Tip="Re-run word/phone alignment against the already-imported transcript, without retranscribing." />
                                 <Button Content="Remove from Library"
                                         Command="{Binding #Root.((vm:LibraryViewModel)DataContext).RemoveFromLibraryCommand}"
                                         CommandParameter="{Binding}"

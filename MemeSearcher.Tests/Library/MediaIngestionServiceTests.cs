@@ -262,6 +262,124 @@ public class MediaIngestionServiceTests : IDisposable
             () => service.ImportAsync(new MediaIngestionRequest(null, null, "en-US")));
     }
 
+    [Fact]
+    public async Task RealignAsync_UpdatesWordTimingAndPopulatesPhonesFromTheAlignmentProvider()
+    {
+        var mediaPath = Path.Combine(_tempDir, "clip.mp4");
+        await File.WriteAllTextAsync(mediaPath, "not a real video, just needs to exist");
+        var srtPath = Path.Combine(_tempDir, "clip.srt");
+        await File.WriteAllTextAsync(srtPath, """
+            1
+            00:00:01,000 --> 00:00:03,000
+            hello world
+
+            """);
+
+        var phonemizer = await CreatePhonemizerIfAvailableAsync();
+        if (phonemizer is null)
+        {
+            return;
+        }
+
+        // Real per-word and per-phone timing an MFA-style provider would produce - deliberately
+        // uneven, so it's obvious this came from the provider and not interpolation.
+        var fakeAlignment = new FakeAlignmentProvider(new AlignmentResult(
+            [
+                new("hello", 1.0, 1.7),
+                new("world", 1.7, 3.0),
+            ],
+            [
+                new("HH", 1.0, 1.2), new("AH0", 1.2, 1.4), new("L", 1.4, 1.55), new("OW1", 1.55, 1.7),
+                new("W", 1.7, 1.9), new("ER1", 1.9, 2.4), new("L", 2.4, 2.7), new("D", 2.7, 3.0),
+            ]));
+
+// A fresh DbContext per operation, matching how MediaIngestionService is actually used in
+        // production (a new scoped context per unit of work via DI) - reusing one context's
+        // change tracker across Import then Realign is a test-only shortcut that doesn't reflect
+        // real usage.
+        await using (var importContext = CreateContext())
+        {
+            var importService = new MediaIngestionService(
+                importContext, TranscriptParserFactory.CreateDefault(), phonemizer,
+                new UnusedTranscriptionProvider(), new MediaMetadataProbe(new FFprobeToolLocator()));
+            await importService.ImportAsync(new MediaIngestionRequest(mediaPath, srtPath, "en-US"));
+        }
+
+        await using var context = CreateContext();
+        var imported = await context.Media.SingleAsync();
+
+        var service = new MediaIngestionService(
+            context, TranscriptParserFactory.CreateDefault(), phonemizer,
+            new UnusedTranscriptionProvider(), new MediaMetadataProbe(new FFprobeToolLocator()), fakeAlignment);
+
+        var result = await service.RealignAsync(imported.Id);
+
+        Assert.Equal(2, result.UpdatedWordCount);
+        Assert.Equal(8, result.UpdatedPhoneCount);
+        Assert.Equal(mediaPath, fakeAlignment.LastMediaPath);
+        Assert.Equal("hello world", fakeAlignment.LastTranscriptText);
+
+        var storedTranscript = await context.Transcripts
+            .Include(t => t.Segments)
+            .ThenInclude(s => s.Words)
+            .ThenInclude(w => w.Phones)
+            .SingleAsync(t => t.MediaId == imported.Id);
+
+        var words = storedTranscript.Segments.Single().Words.OrderBy(w => w.Sequence).ToList();
+        Assert.Equal(1.0, words[0].StartSeconds);
+        Assert.Equal(1.7, words[0].EndSeconds);
+        Assert.Equal(1.7, words[1].StartSeconds);
+        Assert.Equal(3.0, words[1].EndSeconds);
+
+        var helloPhones = words[0].Phones.OrderBy(p => p.Sequence).Select(p => p.Symbol).ToList();
+        Assert.Equal(["HH", "AH0", "L", "OW1"], helloPhones);
+    }
+
+    [Fact]
+    public async Task RealignAsync_WithNoAlignmentProviderConfiguredThrows()
+    {
+        var phonemizer = await CreatePhonemizerIfAvailableAsync();
+        if (phonemizer is null)
+        {
+            return;
+        }
+
+        await using var context = CreateContext();
+        var service = new MediaIngestionService(
+            context, TranscriptParserFactory.CreateDefault(), phonemizer, new UnusedTranscriptionProvider(), new MediaMetadataProbe(new FFprobeToolLocator()));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.RealignAsync(Guid.NewGuid()));
+    }
+
+    [Fact]
+    public async Task RealignAsync_OnATranscriptOnlyImportThrows()
+    {
+        var srtPath = Path.Combine(_tempDir, "clip.srt");
+        await File.WriteAllTextAsync(srtPath, """
+            1
+            00:00:01,000 --> 00:00:03,000
+            hello world
+
+            """);
+
+        var phonemizer = await CreatePhonemizerIfAvailableAsync();
+        if (phonemizer is null)
+        {
+            return;
+        }
+
+        var fakeAlignment = new FakeAlignmentProvider(new AlignmentResult([]));
+
+        await using var context = CreateContext();
+        var service = new MediaIngestionService(
+            context, TranscriptParserFactory.CreateDefault(), phonemizer,
+            new UnusedTranscriptionProvider(), new MediaMetadataProbe(new FFprobeToolLocator()), fakeAlignment);
+
+        var imported = await service.ImportAsync(new MediaIngestionRequest(null, srtPath, "en-US"));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.RealignAsync(imported.Media.Id));
+    }
+
     public void Dispose()
     {
         SqliteConnectionCleanup.TryDeleteFile(_dbPath);

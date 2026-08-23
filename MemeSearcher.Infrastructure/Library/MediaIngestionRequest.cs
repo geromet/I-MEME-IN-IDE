@@ -16,3 +16,6 @@ public enum MediaIngestionOutcome
 }
 
 public record MediaIngestionResult(MediaIngestionOutcome Outcome, Core.Models.Media Media);
+
+/// <summary>Milestone 6: result of MediaIngestionService.RealignAsync - how many words/phones actually got updated.</summary>
+public record RealignmentResult(int UpdatedWordCount, int UpdatedPhoneCount);

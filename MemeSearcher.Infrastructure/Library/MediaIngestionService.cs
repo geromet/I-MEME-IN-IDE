@@ -21,7 +21,8 @@ public class MediaIngestionService(
     TranscriptParserFactory parserFactory,
     IPhonemizer phonemizer,
     ITranscriptionProvider transcriptionProvider,
-    MediaMetadataProbe metadataProbe)
+    MediaMetadataProbe metadataProbe,
+    IAlignmentProvider? alignmentProvider = null)
 {
     public async Task<MediaIngestionResult> ImportAsync(
         MediaIngestionRequest request,
@@ -79,6 +80,122 @@ public class MediaIngestionService(
         await dbContext.SaveChangesAsync(cancellationToken);
 
         return new MediaIngestionResult(MediaIngestionOutcome.Imported, media);
+    }
+
+    /// <summary>
+    /// Milestone 6 / addendum §30: realigns an already-imported media item's word (and, with a
+    /// phone-level-capable provider like MFA, phone) timing - without retranscribing or
+    /// rephonemizing. This is the "reprocess phonetics without retranscribing" pipeline
+    /// independence the addendum asks for, applied specifically to alignment.
+    /// </summary>
+    public async Task<RealignmentResult> RealignAsync(Guid mediaId, CancellationToken cancellationToken = default)
+    {
+        if (alignmentProvider is null)
+        {
+            throw new InvalidOperationException("No alignment provider is configured.");
+        }
+
+        var media = await dbContext.Media.FindAsync([mediaId], cancellationToken);
+        if (media is null)
+        {
+            throw new ArgumentException($"No media found with id '{mediaId}'.", nameof(mediaId));
+        }
+
+        if (media.MediaFilePath is null)
+        {
+            throw new InvalidOperationException("Media has no playable file to align against - transcript-only imports cannot be realigned.");
+        }
+
+        var transcripts = await dbContext.Transcripts
+            .Where(t => t.MediaId == mediaId)
+            .Include(t => t.Segments)
+            .ThenInclude(s => s.Words)
+            .ThenInclude(w => w.Phones)
+            .ToListAsync(cancellationToken);
+
+        if (transcripts.Count == 0)
+        {
+            throw new InvalidOperationException("Media has no transcript to realign.");
+        }
+
+        var orderedSegments = transcripts.SelectMany(t => t.Segments).OrderBy(s => s.Sequence).ToList();
+        var fullText = string.Join(" ", orderedSegments.Select(s => s.Text));
+
+        var alignment = await alignmentProvider.AlignAsync(media.MediaFilePath, fullText, cancellationToken);
+
+        var updatedWordCount = 0;
+        var updatedPhoneCount = 0;
+
+        foreach (var segment in orderedSegments)
+        {
+            var segmentWords = segment.Words.OrderBy(w => w.Sequence).ToList();
+
+            // Bucket aligned words by which segment's time range they fall in. Only apply when
+            // the count matches this segment's own word split - same "don't guess on mismatch"
+            // discipline as BuildWords' interpolation fallback (handoff §49/§50).
+            var wordsInRange = alignment.Words
+                .Where(w => w.StartSeconds >= segment.StartSeconds && w.StartSeconds < segment.EndSeconds)
+                .OrderBy(w => w.StartSeconds)
+                .ToList();
+
+            if (wordsInRange.Count != segmentWords.Count)
+            {
+                continue;
+            }
+
+            for (var i = 0; i < segmentWords.Count; i++)
+            {
+                segmentWords[i].StartSeconds = wordsInRange[i].StartSeconds;
+                segmentWords[i].EndSeconds = wordsInRange[i].EndSeconds;
+                updatedWordCount++;
+
+                if (alignment.Phones is null)
+                {
+                    continue;
+                }
+
+                var phonesInWord = alignment.Phones
+                    .Where(p => p.StartSeconds >= segmentWords[i].StartSeconds && p.StartSeconds < segmentWords[i].EndSeconds)
+                    .OrderBy(p => p.StartSeconds)
+                    .ToList();
+
+                if (phonesInWord.Count == 0)
+                {
+                    continue;
+                }
+
+                // Replace any existing (sparse/placeholder) phone rows for this word.
+                dbContext.Phones.RemoveRange(segmentWords[i].Phones);
+                segmentWords[i].Phones.Clear();
+
+                var newPhones = phonesInWord.Select((p, seq) => new CoreModels.Phone
+                {
+                    Id = Guid.NewGuid(),
+                    WordId = segmentWords[i].Id,
+                    Sequence = seq,
+                    Symbol = p.Symbol,
+                    StartSeconds = p.StartSeconds,
+                    EndSeconds = p.EndSeconds,
+                }).ToList();
+
+                // Added explicitly via the DbSet, NOT also through
+                // segmentWords[i].Phones.Add(...) - a new child entity discovered purely through
+                // a navigation collection on an already-tracked parent can get its EntityState
+                // inferred as Modified instead of Added when its key was assigned client-side (a
+                // real EF Core graph-tracking gotcha, not a hypothetical one: it reproduced as a
+                // DbUpdateConcurrencyException on every run until fixed this way). Doing both
+                // would double-insert each phone, since AddRange already tracks them as Added and
+                // EF's relationship fix-up populates the navigation collection on its own.
+                dbContext.Phones.AddRange(newPhones);
+
+                updatedPhoneCount += newPhones.Count;
+            }
+        }
+
+        media.UpdatedAt = DateTimeOffset.UtcNow;
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        return new RealignmentResult(updatedWordCount, updatedPhoneCount);
     }
 
     /// <summary>

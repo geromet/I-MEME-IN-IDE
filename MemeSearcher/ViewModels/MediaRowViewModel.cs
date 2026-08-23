@@ -17,6 +17,13 @@ public partial class MediaRowViewModel(MediaSummary summary) : ObservableObject
     // shown here so it's not a surprise when Play is unavailable on a search result later.
     public string PlayableMediaDisplay { get; } = summary.HasPlayableMedia ? "🎬 playable" : "transcript only";
 
+    // Milestone 6: realignment (RealignAsync) needs the actual media file to align against -
+    // transcript-only imports can't use it, same restriction as playback.
+    public bool HasPlayableMedia { get; } = summary.HasPlayableMedia;
+
+    [ObservableProperty]
+    private bool _isRealigning;
+
     // Milestone 3: duration is now actually populated (via ffprobe) instead of always zero.
     public string DurationDisplay { get; } = summary.Duration > TimeSpan.Zero
         ? summary.Duration.ToString(@"hh\:mm\:ss")

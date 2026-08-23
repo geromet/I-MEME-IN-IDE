@@ -166,4 +166,37 @@ public partial class LibraryViewModel(
 
     [RelayCommand]
     private void CancelDelete(MediaRowViewModel row) => row.IsPendingDelete = false;
+
+    /// <summary>
+    /// Addendum §30: reprocess a media item's word/phone timing via the configured
+    /// IAlignmentProvider (MFA by default - see App.axaml.cs) without retranscribing. Only
+    /// available for items imported with a playable media file (RealignAsync requires it).
+    /// </summary>
+    [RelayCommand]
+    private async Task RealignAsync(MediaRowViewModel row)
+    {
+        if (row.IsRealigning || !row.HasPlayableMedia)
+        {
+            return;
+        }
+
+        row.IsRealigning = true;
+        StatusMessage = $"Realigning \"{row.Title}\"...";
+
+        try
+        {
+            var result = await ingestionService.RealignAsync(row.Id);
+            StatusMessage = $"Realigned \"{row.Title}\": {result.UpdatedWordCount} word(s), {result.UpdatedPhoneCount} phone(s) updated.";
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"Realign failed for \"{row.Title}\": {ex.Message}";
+        }
+        finally
+        {
+            row.IsRealigning = false;
+        }
+
+        await LoadAsync();
+    }
 }
