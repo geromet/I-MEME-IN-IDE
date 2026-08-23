@@ -63,6 +63,10 @@ public class MemeSearcherDbContext(DbContextOptions<MemeSearcherDbContext> optio
             entity.HasKey(w => w.Id);
             entity.Property(w => w.Text).IsRequired();
 
+            // Stored as the enum name, not its ordinal: a migration that reorders the enum must not
+            // silently relabel every phone row in the corpus (#18).
+            entity.Property(w => w.PhonemeAlphabet).HasConversion<string>().IsRequired();
+
             entity.HasIndex(w => new { w.SegmentId, w.Sequence });
 
             entity.HasMany(w => w.Phones)
@@ -75,6 +79,7 @@ public class MemeSearcherDbContext(DbContextOptions<MemeSearcherDbContext> optio
         {
             entity.HasKey(p => p.Id);
             entity.Property(p => p.Symbol).IsRequired();
+            entity.Property(p => p.Alphabet).HasConversion<string>().IsRequired();
 
             entity.HasIndex(p => new { p.WordId, p.Sequence });
         });

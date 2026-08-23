@@ -49,6 +49,11 @@ public class CompositeSearchService(
             .Where(t => mediaIds.Contains(t.MediaId))
             .Include(t => t.Segments)
             .ThenInclude(s => s.Words)
+            // Phones are loaded because PhoneStreamBuilder now prefers them over the predicted
+            // Word.PhonemeSequence where an alignment has run (#18). Without this Include they
+            // come back empty and the builder silently falls back to the prediction - the exact
+            // "aligned data is inert for search" bug being fixed.
+            .ThenInclude(w => w.Phones)
             .ToListAsync(cancellationToken);
 
         var transcriptsByMedia = transcripts.ToLookup(t => t.MediaId);

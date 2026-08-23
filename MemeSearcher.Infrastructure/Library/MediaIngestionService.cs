@@ -1,4 +1,5 @@
 using MemeSearcher.Core.Interfaces;
+using MemeSearcher.Core.Phonetics;
 using MemeSearcher.Core.Transcripts;
 using MemeSearcher.Infrastructure.Database;
 using MemeSearcher.Infrastructure.Ffmpeg;
@@ -130,6 +131,8 @@ public class MediaIngestionService(
 
         var alignment = await alignmentProvider.AlignAsync(media.MediaFilePath, fullText, cancellationToken);
 
+        var phoneAlphabet = ValidateDeclaredAlphabet(alignment);
+
         var updatedWordCount = 0;
         var updatedPhoneCount = 0;
 
@@ -181,6 +184,7 @@ public class MediaIngestionService(
                     WordId = segmentWords[i].Id,
                     Sequence = seq,
                     Symbol = p.Symbol,
+                    Alphabet = phoneAlphabet!.Value,
                     StartSeconds = p.StartSeconds,
                     EndSeconds = p.EndSeconds,
                 }).ToList();
@@ -270,12 +274,40 @@ public class MediaIngestionService(
                 PhonemeSequence = JoinWordBoundaries(phonemized.Words),
             };
 
-            segment.Words = BuildWords(segment.Id, phonemized.Words, cue.StartSeconds, cue.EndSeconds, cue.Words);
+            segment.Words = BuildWords(
+                segment.Id, phonemized.Words, cue.StartSeconds, cue.EndSeconds, cue.Words, phonemizer.Alphabet);
 
             transcript.Segments.Add(segment);
         }
 
+        ValidatePhonemizerAlphabet(transcript);
+
         return transcript;
+    }
+
+    /// <summary>
+    /// Same declaration-versus-reality check as <see cref="ValidateDeclaredAlphabet"/>, applied to
+    /// the phonemizer (#18). Run once over the whole transcript rather than per cue, because
+    /// detection needs a reasonable sample: a single short word can be entirely ASCII and
+    /// therefore undecidable, while a transcript's worth of symbols almost never is.
+    /// </summary>
+    private void ValidatePhonemizerAlphabet(CoreModels.Transcript transcript)
+    {
+        var symbols = transcript.Segments
+            .SelectMany(s => s.Words)
+            .Select(w => w.PhonemeSequence)
+            .Where(sequence => !string.IsNullOrEmpty(sequence))
+            .SelectMany(sequence => sequence!.Split(' ', StringSplitOptions.RemoveEmptyEntries));
+
+        var detected = PhoneAlphabetDetector.Detect(symbols);
+
+        if (detected.IsConfident && detected.Alphabet != phonemizer.Alphabet)
+        {
+            throw new InvalidOperationException(
+                $"Phonemizer '{phonemizer.ProviderName}' declares {phonemizer.Alphabet} but its output "
+                + $"looks like {detected.Alphabet}: {detected.Explanation} Refusing to store mis-tagged "
+                + "phonemes.");
+        }
     }
 
     /// <summary>
@@ -294,12 +326,53 @@ public class MediaIngestionService(
     /// and silently misaligning word N's real timing to phonemized word M would be worse than the
     /// honest placeholder, so any mismatch just falls back rather than guessing.
     /// </summary>
+    /// <summary>
+    /// Checks the alignment provider's declared alphabet against what it actually wrote, and fails
+    /// loudly on a mismatch (#18).
+    ///
+    /// The declaration is the source of truth - MFA's english_us_arpa models emit ARPABET and that
+    /// is not in doubt. Detection is the safety net: it catches a provider reconfigured to a
+    /// different model, or a future provider whose declaration is simply wrong. Getting this wrong
+    /// silently is the entire failure mode this issue exists to close - mis-tagged phones convert
+    /// to the wrong canonical symbols and the corpus quietly stops matching, with no error
+    /// anywhere.
+    ///
+    /// Only a *confident* contradiction throws. Short or ASCII-only phone sets are genuinely
+    /// undecidable, and refusing an import over "I could not tell" would be worse than trusting
+    /// the declaration.
+    /// </summary>
+    private PhoneAlphabet? ValidateDeclaredAlphabet(AlignmentResult alignment)
+    {
+        if (alignment.Phones is null || alignment.Phones.Count == 0)
+        {
+            return null;
+        }
+
+        var declared = alignmentProvider!.PhoneAlphabet
+            ?? throw new InvalidOperationException(
+                $"Alignment provider '{alignmentProvider.ProviderName}' returned {alignment.Phones.Count} "
+                + "phones but declares no phone alphabet, so they cannot be stored or interpreted.");
+
+        var detected = PhoneAlphabetDetector.Detect(alignment.Phones.Select(p => p.Symbol));
+
+        if (detected.IsConfident && detected.Alphabet != declared)
+        {
+            throw new InvalidOperationException(
+                $"Alignment provider '{alignmentProvider.ProviderName}' declares {declared} but its output "
+                + $"looks like {detected.Alphabet}: {detected.Explanation} Refusing to store mis-tagged "
+                + "phones - they would convert to the wrong canonical symbols and silently stop matching.");
+        }
+
+        return declared;
+    }
+
     private static List<CoreModels.Word> BuildWords(
         Guid segmentId,
         IReadOnlyList<PhonemizedWord> phonemizedWords,
         double startSeconds,
         double endSeconds,
-        IReadOnlyList<ParsedWord>? realWords)
+        IReadOnlyList<ParsedWord>? realWords,
+        PhoneAlphabet alphabet)
     {
         if (phonemizedWords.Count == 0)
         {
@@ -307,12 +380,13 @@ public class MediaIngestionService(
         }
 
         return realWords is not null && realWords.Count == phonemizedWords.Count
-            ? BuildWordsFromRealTiming(segmentId, phonemizedWords, realWords)
-            : BuildWordsFromInterpolation(segmentId, phonemizedWords, startSeconds, endSeconds);
+            ? BuildWordsFromRealTiming(segmentId, phonemizedWords, realWords, alphabet)
+            : BuildWordsFromInterpolation(segmentId, phonemizedWords, startSeconds, endSeconds, alphabet);
     }
 
     private static List<CoreModels.Word> BuildWordsFromRealTiming(
-        Guid segmentId, IReadOnlyList<PhonemizedWord> phonemizedWords, IReadOnlyList<ParsedWord> realWords)
+        Guid segmentId, IReadOnlyList<PhonemizedWord> phonemizedWords, IReadOnlyList<ParsedWord> realWords,
+        PhoneAlphabet alphabet)
     {
         var words = new List<CoreModels.Word>(phonemizedWords.Count);
 
@@ -329,6 +403,7 @@ public class MediaIngestionService(
                 NormalizedText = phonemizedWord.Text,
                 Ipa = phonemizedWord.Ipa,
                 PhonemeSequence = string.Join(' ', phonemizedWord.Phonemes),
+                PhonemeAlphabet = alphabet,
                 StartSeconds = realWords[i].StartSeconds,
                 EndSeconds = realWords[i].EndSeconds,
             });
@@ -338,7 +413,8 @@ public class MediaIngestionService(
     }
 
     private static List<CoreModels.Word> BuildWordsFromInterpolation(
-        Guid segmentId, IReadOnlyList<PhonemizedWord> phonemizedWords, double startSeconds, double endSeconds)
+        Guid segmentId, IReadOnlyList<PhonemizedWord> phonemizedWords, double startSeconds, double endSeconds,
+        PhoneAlphabet alphabet)
     {
         var totalChars = phonemizedWords.Sum(w => w.Text.Length);
         var duration = endSeconds - startSeconds;
@@ -362,6 +438,7 @@ public class MediaIngestionService(
                 NormalizedText = phonemizedWord.Text,
                 Ipa = phonemizedWord.Ipa,
                 PhonemeSequence = string.Join(' ', phonemizedWord.Phonemes),
+                PhonemeAlphabet = alphabet,
                 StartSeconds = wordStart,
                 EndSeconds = wordEnd,
             });

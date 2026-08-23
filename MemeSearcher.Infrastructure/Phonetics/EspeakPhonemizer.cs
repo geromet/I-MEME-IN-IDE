@@ -18,6 +18,9 @@ public class EspeakPhonemizer(IExternalToolLocator toolLocator) : IPhonemizer
 {
     public string ProviderName => "espeak-ng";
 
+    // espeak-ng is invoked with --ipa, so this is known rather than inferred (#18).
+    public PhoneAlphabet Alphabet => PhoneAlphabet.Ipa;
+
     // The neutral ids from LanguageCatalog, not espeak voice names - callers pass ids and this
     // class maps to a voice at invocation time (#23). espeak-ng supports far more voices than
     // this; the catalog is deliberately limited to languages whisperx also supports, since both

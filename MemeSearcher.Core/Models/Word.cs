@@ -1,3 +1,5 @@
+using MemeSearcher.Core.Phonetics;
+
 namespace MemeSearcher.Core.Models;
 
 public class Word
@@ -9,6 +11,15 @@ public class Word
     public string? NormalizedText { get; set; }
     public string? Ipa { get; set; }
     public string? PhonemeSequence { get; set; }
+
+    /// <summary>
+    /// Which alphabet <see cref="Ipa"/> and <see cref="PhonemeSequence"/> are written in (#18).
+    ///
+    /// The tag has to live here rather than on Media or Transcript, because a single Word can hold
+    /// two alphabets at once: espeak writes IPA into these fields while MFA writes ARPABET into
+    /// <see cref="Phones"/>. Each carrier of phone data tags itself.
+    /// </summary>
+    public PhoneAlphabet PhonemeAlphabet { get; set; } = PhoneAlphabet.Ipa;
     public double StartSeconds { get; set; }
     public double EndSeconds { get; set; }
 

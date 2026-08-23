@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using MemeSearcher.Core.Interfaces;
+using MemeSearcher.Core.Phonetics;
 using MemeSearcher.Infrastructure.Processes;
 
 namespace MemeSearcher.Infrastructure.Transcription;
@@ -26,6 +27,9 @@ namespace MemeSearcher.Infrastructure.Transcription;
 public class WhisperXAlignmentProvider(WhisperXToolLocator toolLocator) : IAlignmentProvider
 {
     public string ProviderName => "whisperx";
+
+    // Word-level alignment only - it produces no phones, so it has no phone alphabet (#18).
+    public PhoneAlphabet? PhoneAlphabet => null;
 
     public async Task<AlignmentResult> AlignAsync(string mediaPath, string transcriptText, CancellationToken cancellationToken = default)
     {

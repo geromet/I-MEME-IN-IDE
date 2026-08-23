@@ -380,6 +380,54 @@ public class MediaIngestionServiceTests : IDisposable
         await Assert.ThrowsAsync<InvalidOperationException>(() => service.RealignAsync(imported.Media.Id));
     }
 
+    /// <summary>
+    /// The phonemizer half of the declaration check (#18). A phonemizer whose declared alphabet
+    /// contradicts what it actually emits must fail the import rather than write mis-tagged
+    /// phonemes that later convert wrongly and silently stop matching.
+    /// </summary>
+    [Fact]
+    public async Task ImportAsync_RefusesAPhonemizerWhoseDeclaredAlphabetContradictsItsOutput()
+    {
+        var srtPath = Path.Combine(_tempDir, "clip.srt");
+        await File.WriteAllTextAsync(srtPath, """
+            1
+            00:00:01,000 --> 00:00:03,000
+            hello world
+
+            """);
+
+        await using var context = CreateContext();
+        var service = new MediaIngestionService(
+            context, TranscriptParserFactory.CreateDefault(),
+            new MisdeclaringPhonemizer(), new UnusedTranscriptionProvider(),
+            new MediaMetadataProbe(new FFprobeToolLocator()));
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => service.ImportAsync(new MediaIngestionRequest(null, srtPath, "en-US")));
+
+        Assert.Contains("declares Ipa", ex.Message);
+        Assert.Contains("Arpabet", ex.Message);
+    }
+
+    /// <summary>Claims IPA, emits unmistakable ARPABET.</summary>
+    private sealed class MisdeclaringPhonemizer : IPhonemizer
+    {
+        public string ProviderName => "misdeclaring";
+
+        public IReadOnlyCollection<string> SupportedLanguages => ["en-US"];
+
+        public Core.Phonetics.PhoneAlphabet Alphabet => Core.Phonetics.PhoneAlphabet.Ipa;
+
+        public Task<PhonemizationResult> PhonemizeAsync(string text, string language, CancellationToken cancellationToken = default)
+        {
+            var words = text.Split(' ', StringSplitOptions.RemoveEmptyEntries)
+                .Select(w => new PhonemizedWord(w, "x", new[] { "HH", "AH0", "L", "OW1" }))
+                .ToList();
+
+            return Task.FromResult(new PhonemizationResult(text, "x", words));
+        }
+    }
+
     public void Dispose()
     {
         SqliteConnectionCleanup.TryDeleteFile(_dbPath);

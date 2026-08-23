@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using MemeSearcher.Core.Interfaces;
+using MemeSearcher.Core.Phonetics;
 using MemeSearcher.Infrastructure.Processes;
 
 namespace MemeSearcher.Infrastructure.Alignment;
@@ -20,6 +21,10 @@ namespace MemeSearcher.Infrastructure.Alignment;
 public class MfaAlignmentProvider(MfaToolLocator toolLocator) : IAlignmentProvider
 {
     public string ProviderName => "mfa";
+
+    // The english_us_arpa models this provider requires emit ARPABET with stress digits (HH, AH0,
+    // OW1) - a different alphabet from the IPA espeak writes onto the same Word (#18).
+    public PhoneAlphabet? PhoneAlphabet => Core.Phonetics.PhoneAlphabet.Arpabet;
 
     private const string DictionaryAndAcousticModel = "english_us_arpa";
 
