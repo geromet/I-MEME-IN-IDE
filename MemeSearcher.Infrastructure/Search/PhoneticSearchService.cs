@@ -120,8 +120,13 @@ public class PhoneticSearchService(
         var matchedEntries = candidateStream.Skip(match.Start).Take(match.End - match.Start).ToList();
         var phonemeEntries = matchedEntries.Where(e => !e.Token.IsBoundary).ToList();
 
-        var startSeconds = phonemeEntries.Count > 0 ? phonemeEntries[0].StartSeconds!.Value : 0;
-        var endSeconds = phonemeEntries.Count > 0 ? phonemeEntries[^1].EndSeconds!.Value : 0;
+        // Null propagates rather than collapsing to 0 (#32). These unwraps were safe only while a
+        // stored timing could never be null; a match inside a plain-text transcript now genuinely
+        // has none, and forcing it to zero is the exact fabrication that issue removed. The
+        // empty-match branch is null for the same reason - "no phonemes matched" is not "matched
+        // at the start of the file".
+        var startSeconds = phonemeEntries.Count > 0 ? phonemeEntries[0].StartSeconds : null;
+        var endSeconds = phonemeEntries.Count > 0 ? phonemeEntries[^1].EndSeconds : null;
 
         var sourceText = string.Join(' ', DistinctConsecutiveWords(phonemeEntries));
         var ipa = string.Join(' ', GroupByWord(phonemeEntries).Select(g => string.Concat(g)));

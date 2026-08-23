@@ -184,8 +184,9 @@ public class CompositeSearchService(
         var minIndex = group[0].Index;
         var maxIndex = group[^1].Index;
 
-        var startSeconds = group[0].Entry.StartSeconds!.Value;
-        var endSeconds = group[^1].Entry.EndSeconds!.Value;
+        // See PhoneticSearchService: null timing propagates instead of becoming a fake zero (#32).
+        var startSeconds = group[0].Entry.StartSeconds;
+        var endSeconds = group[^1].Entry.EndSeconds;
 
         var sourceText = string.Join(' ', DistinctConsecutiveWords(group.Select(g => g.Entry)));
         var ipa = string.Join(' ', GroupByWord(group.Select(g => g.Entry)));
