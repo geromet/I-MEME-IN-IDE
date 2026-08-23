@@ -1,10 +1,214 @@
 <Application xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="MemeSearcher.App"
-             RequestedThemeVariant="Default">
-             <!-- "Default" ThemeVariant follows system theme variant. "Dark" or "Light" are other available options. -->
+             RequestedThemeVariant="Dark">
 
     <Application.Styles>
         <FluentTheme />
+
+        <Styles>
+            <Styles.Resources>
+
+                <!-- ══ COLOR PALETTE ══ -->
+                <!-- Milestone 11: converges on the look of geromet/PZTools' UI/App.axaml. -->
+
+                <!-- Backgrounds (dark -> light) -->
+                <SolidColorBrush x:Key="BgBase" Color="#111114" />
+                <SolidColorBrush x:Key="BgPanel" Color="#18181C" />
+                <SolidColorBrush x:Key="BgSurface" Color="#1E1E24" />
+                <SolidColorBrush x:Key="BgElevated" Color="#26262E" />
+                <SolidColorBrush x:Key="BgInput" Color="#2C2C36" />
+                <SolidColorBrush x:Key="BgHover" Color="#32323E" />
+
+                <!-- Borders -->
+                <SolidColorBrush x:Key="BorderSubtle" Color="#2E2E3A" />
+                <SolidColorBrush x:Key="BorderMid" Color="#3C3C4C" />
+
+                <!-- Accent -->
+                <SolidColorBrush x:Key="Accent" Color="#4A7FA8" />
+                <SolidColorBrush x:Key="AccentHover" Color="#5A93BF" />
+                <SolidColorBrush x:Key="AccentMuted" Color="#2A4F6A" />
+
+                <!-- Text -->
+                <SolidColorBrush x:Key="TextPrimary" Color="#E4E4EA" />
+                <SolidColorBrush x:Key="TextSecondary" Color="#8A8A98" />
+                <SolidColorBrush x:Key="TextMuted" Color="#5A5A6A" />
+
+                <!-- Status -->
+                <SolidColorBrush x:Key="StatusError" Color="#C84B4B" />
+                <SolidColorBrush x:Key="StatusWarning" Color="#C88B2A" />
+                <SolidColorBrush x:Key="StatusSuccess" Color="#4A9E6A" />
+
+                <!-- Translucent variant of StatusError for banner-style backgrounds (replaces the
+                     old ad-hoc "#33C04040" literal) - kept in the palette section, not inlined at
+                     each call site, so the exit criteria's "no hardcoded colors outside the palette
+                     definition" holds for banners too. -->
+                <SolidColorBrush x:Key="StatusErrorMuted" Color="#33C84B4B" />
+                <SolidColorBrush x:Key="StatusErrorHover" Color="#D86464" />
+
+            </Styles.Resources>
+
+            <!-- ══ WINDOW ══ -->
+
+            <Style Selector="Window">
+                <Setter Property="Background" Value="{StaticResource BgBase}" />
+            </Style>
+
+            <!-- ══ SCROLLING ══ -->
+
+            <Style Selector="ScrollBar">
+                <Setter Property="Width" Value="14" />
+                <Setter Property="MinWidth" Value="14" />
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="Opacity" Value="0.6" />
+            </Style>
+
+            <!-- ══ LIST CONTROLS ══ -->
+
+            <Style Selector="ListBox">
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="BorderBrush" Value="Transparent" />
+                <Setter Property="Padding" Value="0" />
+            </Style>
+            <Style Selector="ListBoxItem">
+                <Setter Property="Padding" Value="0" />
+                <Setter Property="Foreground" Value="{StaticResource TextSecondary}" />
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="CornerRadius" Value="4" />
+                <Setter Property="Margin" Value="0 1" />
+            </Style>
+            <Style Selector="ListBoxItem:pointerover /template/ ContentPresenter">
+                <Setter Property="Background" Value="{StaticResource BgHover}" />
+            </Style>
+            <Style Selector="ListBoxItem:selected /template/ ContentPresenter">
+                <Setter Property="Background" Value="{StaticResource BgElevated}" />
+                <Setter Property="TextBlock.Foreground" Value="{StaticResource TextPrimary}" />
+            </Style>
+
+            <!-- ══ TEXT INPUT ══ -->
+
+            <Style Selector="TextBox">
+                <Setter Property="Background" Value="{StaticResource BgInput}" />
+                <Setter Property="BorderBrush" Value="{StaticResource BorderSubtle}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="Foreground" Value="{StaticResource TextPrimary}" />
+                <Setter Property="CaretBrush" Value="{StaticResource Accent}" />
+                <Setter Property="SelectionBrush" Value="{StaticResource AccentMuted}" />
+                <Setter Property="Padding" Value="8 5" />
+                <Setter Property="CornerRadius" Value="4" />
+            </Style>
+
+            <Style Selector="CheckBox">
+                <Setter Property="Foreground" Value="{StaticResource TextSecondary}" />
+            </Style>
+
+            <!-- ══ BUTTONS ══ -->
+
+            <Style Selector="Button">
+                <Setter Property="Background" Value="{StaticResource BgElevated}" />
+                <Setter Property="BorderBrush" Value="{StaticResource BorderSubtle}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="Foreground" Value="{StaticResource TextSecondary}" />
+                <Setter Property="Padding" Value="12 5" />
+                <Setter Property="CornerRadius" Value="4" />
+                <Setter Property="Cursor" Value="Hand" />
+            </Style>
+            <Style Selector="Button:pointerover /template/ ContentPresenter">
+                <Setter Property="Background" Value="{StaticResource BgHover}" />
+                <Setter Property="TextBlock.Foreground" Value="{StaticResource TextPrimary}" />
+            </Style>
+            <Style Selector="Button:pressed /template/ ContentPresenter">
+                <Setter Property="Background" Value="{StaticResource AccentMuted}" />
+            </Style>
+
+            <!-- Filter pill (Milestone 7's recent-search buttons - previously full-size buttons). -->
+            <Style Selector="Button.FilterPill">
+                <Setter Property="Background" Value="{StaticResource BgInput}" />
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="Padding" Value="10 4" />
+                <Setter Property="CornerRadius" Value="12" />
+                <Setter Property="FontSize" Value="11" />
+                <Setter Property="Margin" Value="0 0 6 6" />
+            </Style>
+            <Style Selector="Button.FilterPill:pointerover /template/ ContentPresenter">
+                <Setter Property="Background" Value="{StaticResource AccentMuted}" />
+                <Setter Property="TextBlock.Foreground" Value="{StaticResource AccentHover}" />
+            </Style>
+
+            <!-- Inline navigation link: no button chrome, underlines on hover. -->
+            <Style Selector="Button.NavLink">
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="Padding" Value="0" />
+                <Setter Property="MinHeight" Value="0" />
+                <Setter Property="Foreground" Value="{StaticResource Accent}" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+            </Style>
+            <Style Selector="Button.NavLink:pointerover /template/ ContentPresenter">
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="TextBlock.Foreground" Value="{StaticResource AccentHover}" />
+                <Setter Property="TextBlock.TextDecorations" Value="Underline" />
+            </Style>
+
+            <!-- Destructive action (replaces the old hardcoded Background="DarkRed" on the delete
+                 confirmation button). -->
+            <Style Selector="Button.Danger">
+                <Setter Property="Background" Value="{StaticResource StatusError}" />
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="Foreground" Value="{StaticResource TextPrimary}" />
+            </Style>
+            <Style Selector="Button.Danger:pointerover /template/ ContentPresenter">
+                <Setter Property="Background" Value="{StaticResource StatusErrorHover}" />
+            </Style>
+
+            <!-- ══ TABS ══ -->
+
+            <Style Selector="TabControl">
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="Padding" Value="0" />
+                <Setter Property="Margin" Value="0" />
+            </Style>
+            <Style Selector="TabItem">
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="Foreground" Value="{StaticResource TextMuted}" />
+                <Setter Property="Padding" Value="14 8" />
+                <Setter Property="Margin" Value="0" />
+            </Style>
+            <Style Selector="TabItem:selected">
+                <Setter Property="Foreground" Value="{StaticResource TextPrimary}" />
+            </Style>
+            <Style Selector="TabItem:pointerover /template/ ContentPresenter">
+                <Setter Property="TextBlock.Foreground" Value="{StaticResource TextSecondary}" />
+            </Style>
+
+            <!-- ══ LAYOUT ══ -->
+
+            <Style Selector="GridSplitter">
+                <Setter Property="Background" Value="{StaticResource BorderSubtle}" />
+            </Style>
+
+            <Style Selector="Separator">
+                <Setter Property="Background" Value="{StaticResource BorderSubtle}" />
+                <Setter Property="Height" Value="1" />
+                <Setter Property="Margin" Value="0 4" />
+            </Style>
+
+            <!-- ══ TYPOGRAPHY ══ -->
+
+            <!-- Muted small text under a control - help text, per-row secondary details. -->
+            <Style Selector="TextBlock.FieldLabel">
+                <Setter Property="Foreground" Value="{StaticResource TextMuted}" />
+                <Setter Property="FontSize" Value="11" />
+            </Style>
+
+            <!-- Compact inline label sitting alongside a primary value (timestamps, counts, IPA). -->
+            <Style Selector="TextBlock.HeaderLabel">
+                <Setter Property="FontSize" Value="11" />
+                <Setter Property="Foreground" Value="{StaticResource TextSecondary}" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+            </Style>
+
+        </Styles>
     </Application.Styles>
 </Application>

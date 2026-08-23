@@ -22,33 +22,33 @@
                 Margin="0,8,0,12"
                 Padding="10"
                 CornerRadius="4"
-                Background="#33C04040"
+                Background="{StaticResource StatusErrorMuted}"
                 IsVisible="{Binding IsStatusError}">
-            <SelectableTextBlock Text="{Binding StatusMessage}" TextWrapping="Wrap" />
+            <SelectableTextBlock Text="{Binding StatusMessage}" TextWrapping="Wrap" Foreground="{StaticResource TextPrimary}" />
         </Border>
 
         <TextBlock Grid.Row="1"
+                   Classes="FieldLabel"
                    Margin="0,8,0,12"
                    Text="{Binding StatusMessage}"
-                   Opacity="0.7"
                    TextWrapping="Wrap"
                    IsVisible="{Binding !IsStatusError}" />
 
         <ListBox Grid.Row="2" ItemsSource="{Binding Items}">
             <ListBox.ItemTemplate>
                 <DataTemplate x:DataType="vm:MediaRowViewModel">
-                    <Border Padding="10" Margin="0,3" BorderThickness="1" BorderBrush="#33808080" CornerRadius="4">
+                    <Border Padding="10" Margin="0,3" BorderThickness="1" BorderBrush="{StaticResource BorderMid}" CornerRadius="4">
                         <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
                             <StackPanel Grid.Column="0" Spacing="2">
-                                <TextBlock Text="{Binding Title}" FontSize="15" FontWeight="Bold" />
-                                <TextBlock Text="{Binding Path}" Opacity="0.6" FontFamily="monospace" FontSize="11" TextTrimming="CharacterEllipsis" />
+                                <TextBlock Text="{Binding Title}" FontSize="15" FontWeight="Bold" Foreground="{StaticResource TextPrimary}" />
+                                <TextBlock Classes="FieldLabel" Text="{Binding Path}" FontFamily="monospace" TextTrimming="CharacterEllipsis" />
                                 <StackPanel Orientation="Horizontal" Spacing="12">
-                                    <TextBlock Text="{Binding Language}" Opacity="0.7" />
-                                    <TextBlock Text="{Binding SegmentsDisplay}" Opacity="0.7" />
-                                    <TextBlock Text="{Binding PhonemeCoverageDisplay}" Opacity="0.7" />
-                                    <TextBlock Text="{Binding PlayableMediaDisplay}" Opacity="0.7" />
-                                    <TextBlock Text="{Binding DurationDisplay}" Opacity="0.7" />
-                                    <TextBlock Text="{Binding ImportedAtDisplay}" Opacity="0.7" />
+                                    <TextBlock Classes="HeaderLabel" Text="{Binding Language}" />
+                                    <TextBlock Classes="HeaderLabel" Text="{Binding SegmentsDisplay}" />
+                                    <TextBlock Classes="HeaderLabel" Text="{Binding PhonemeCoverageDisplay}" />
+                                    <TextBlock Classes="HeaderLabel" Text="{Binding PlayableMediaDisplay}" />
+                                    <TextBlock Classes="HeaderLabel" Text="{Binding DurationDisplay}" />
+                                    <TextBlock Classes="HeaderLabel" Text="{Binding ImportedAtDisplay}" />
                                 </StackPanel>
                             </StackPanel>
 
@@ -67,8 +67,8 @@
                                         Command="{Binding #Root.((vm:LibraryViewModel)DataContext).DeleteSourceFileCommand}"
                                         CommandParameter="{Binding}"
                                         IsVisible="{Binding !IsPendingDelete}" />
-                                <Button Content="Confirm Delete?"
-                                        Background="DarkRed"
+                                <Button Classes="Danger"
+                                        Content="Confirm Delete?"
                                         Command="{Binding #Root.((vm:LibraryViewModel)DataContext).DeleteSourceFileCommand}"
                                         CommandParameter="{Binding}"
                                         IsVisible="{Binding IsPendingDelete}" />

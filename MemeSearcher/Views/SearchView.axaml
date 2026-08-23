@@ -28,7 +28,7 @@
             </ItemsControl.ItemsPanel>
             <ItemsControl.ItemTemplate>
                 <DataTemplate x:DataType="models:SearchHistoryEntry">
-                    <Button Margin="0,0,6,6" FontSize="11"
+                    <Button Classes="FilterPill"
                             Content="{Binding QueryText}"
                             ToolTip.Tip="{Binding ScopeDescription}"
                             Command="{Binding #Root.((vm:SearchViewModel)DataContext).RerunSearchCommand}"
@@ -37,21 +37,21 @@
             </ItemsControl.ItemTemplate>
         </ItemsControl>
 
-        <TextBlock Grid.Row="3" Margin="0,8,0,0" Text="{Binding QueryIpa, StringFormat='IPA: {0}'}" />
+        <TextBlock Grid.Row="3" Classes="HeaderLabel" Margin="0,8,0,0" Text="{Binding QueryIpa, StringFormat='IPA: {0}'}" />
 
-        <TextBlock Grid.Row="4" Margin="0,4,0,12" Text="{Binding StatusMessage}" Opacity="0.7" />
+        <TextBlock Grid.Row="4" Classes="FieldLabel" Margin="0,4,0,12" Text="{Binding StatusMessage}" />
 
         <ListBox Grid.Row="5" ItemsSource="{Binding Results}" IsVisible="{Binding !IsCompositeMode}">
             <ListBox.ItemTemplate>
                 <DataTemplate x:DataType="vm:SearchResultRowViewModel">
-                    <Border Padding="8" Margin="0,2" BorderThickness="0,0,0,1" BorderBrush="#33808080">
+                    <Border Padding="8" Margin="0,2" BorderThickness="0,0,0,1" BorderBrush="{StaticResource BorderMid}">
                         <StackPanel Spacing="2">
                             <StackPanel Orientation="Horizontal" Spacing="12">
-                                <TextBlock Text="{Binding ScoreDisplay}" FontWeight="Bold" />
-                                <TextBlock Text="{Binding TimeRangeDisplay}" Opacity="0.7" />
+                                <TextBlock Text="{Binding ScoreDisplay}" FontWeight="Bold" Foreground="{StaticResource TextPrimary}" />
+                                <TextBlock Classes="HeaderLabel" Text="{Binding TimeRangeDisplay}" />
                             </StackPanel>
-                            <TextBlock Text="{Binding SourceText}" FontSize="15" />
-                            <TextBlock Text="{Binding Ipa}" Opacity="0.6" FontFamily="monospace" />
+                            <TextBlock Text="{Binding SourceText}" FontSize="15" Foreground="{StaticResource TextPrimary}" />
+                            <TextBlock Text="{Binding Ipa}" FontFamily="monospace" Foreground="{StaticResource TextSecondary}" />
 
                             <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,4,0,0">
                                 <Button Content="▶ Play" Command="{Binding PlayCommand}" />
@@ -61,7 +61,7 @@
                                 <Button Content="Copy IPA" Command="{Binding CopyIpaCommand}" />
                                 <Button Content="Copy phonemes" Command="{Binding CopyPhonemesCommand}" />
                             </StackPanel>
-                            <TextBlock Text="{Binding PlaybackStatus}" Opacity="0.6" FontSize="11" />
+                            <TextBlock Classes="FieldLabel" Text="{Binding PlaybackStatus}" />
                         </StackPanel>
                     </Border>
                 </DataTemplate>
@@ -71,27 +71,27 @@
         <ListBox Grid.Row="5" ItemsSource="{Binding CompositeResults}" IsVisible="{Binding IsCompositeMode}">
             <ListBox.ItemTemplate>
                 <DataTemplate x:DataType="vm:CompositeSearchResultRowViewModel">
-                    <Border Padding="8" Margin="0,2" BorderThickness="0,0,0,1" BorderBrush="#33808080">
+                    <Border Padding="8" Margin="0,2" BorderThickness="0,0,0,1" BorderBrush="{StaticResource BorderMid}">
                         <StackPanel Spacing="4">
                             <StackPanel Orientation="Horizontal" Spacing="12">
-                                <TextBlock Text="{Binding ScoreDisplay}" FontWeight="Bold" />
-                                <TextBlock Text="{Binding SourceCountDisplay}" Opacity="0.7" />
+                                <TextBlock Text="{Binding ScoreDisplay}" FontWeight="Bold" Foreground="{StaticResource TextPrimary}" />
+                                <TextBlock Classes="HeaderLabel" Text="{Binding SourceCountDisplay}" />
                                 <Button Content="Export assembled clip..." Command="{Binding ExportClipCommand}" />
                             </StackPanel>
-                            <TextBlock Text="{Binding ExportStatus}" Opacity="0.6" FontSize="11" />
+                            <TextBlock Classes="FieldLabel" Text="{Binding ExportStatus}" />
 
                             <ItemsControl ItemsSource="{Binding Components}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate x:DataType="vm:CompositeComponentRowViewModel">
-                                        <Border Padding="6" Margin="12,2,0,2" BorderThickness="1" BorderBrush="#22808080" CornerRadius="3">
+                                        <Border Padding="6" Margin="12,2,0,2" BorderThickness="1" BorderBrush="{StaticResource BorderSubtle}" CornerRadius="3">
                                             <StackPanel Spacing="1">
                                                 <StackPanel Orientation="Horizontal" Spacing="8">
-                                                    <TextBlock Text="{Binding MediaTitle}" FontWeight="Bold" FontSize="12" />
-                                                    <TextBlock Text="{Binding TimeRangeDisplay}" Opacity="0.7" FontSize="11" />
-                                                    <TextBlock Text="{Binding ScoreDisplay}" Opacity="0.7" FontSize="11" />
+                                                    <TextBlock Text="{Binding MediaTitle}" FontWeight="Bold" FontSize="12" Foreground="{StaticResource TextPrimary}" />
+                                                    <TextBlock Classes="HeaderLabel" Text="{Binding TimeRangeDisplay}" />
+                                                    <TextBlock Classes="HeaderLabel" Text="{Binding ScoreDisplay}" />
                                                 </StackPanel>
-                                                <TextBlock Text="{Binding SourceText}" FontSize="13" />
-                                                <TextBlock Text="{Binding Ipa}" Opacity="0.6" FontFamily="monospace" FontSize="11" />
+                                                <TextBlock Text="{Binding SourceText}" FontSize="13" Foreground="{StaticResource TextPrimary}" />
+                                                <TextBlock Classes="FieldLabel" Text="{Binding Ipa}" FontFamily="monospace" />
                                             </StackPanel>
                                         </Border>
                                     </DataTemplate>
