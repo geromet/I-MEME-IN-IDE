@@ -96,7 +96,13 @@ public class MediaIngestionService(
         }
 
         var transcribed = await transcriptionProvider.TranscribeAsync(request.MediaPath!, request.Language, cancellationToken);
-        var cues = transcribed.Segments.Select(s => new ParsedCue(s.StartSeconds, s.EndSeconds, s.Text)).ToList();
+        var cues = transcribed.Segments
+            .Select(s => new ParsedCue(
+                s.StartSeconds,
+                s.EndSeconds,
+                s.Text,
+                s.Words?.Select(w => new ParsedWord(w.Text, w.StartSeconds, w.EndSeconds)).ToList()))
+            .ToList();
         return new ParsedTranscript(transcriptionProvider.ProviderName, cues);
     }
 
@@ -139,7 +145,7 @@ public class MediaIngestionService(
                 PhonemeSequence = JoinWordBoundaries(phonemized.Words),
             };
 
-            segment.Words = BuildWords(segment.Id, phonemized.Words, cue.StartSeconds, cue.EndSeconds);
+            segment.Words = BuildWords(segment.Id, phonemized.Words, cue.StartSeconds, cue.EndSeconds, cue.Words);
 
             transcript.Segments.Add(segment);
         }
@@ -155,21 +161,60 @@ public class MediaIngestionService(
         string.Join(" | ", words.Select(w => string.Join(' ', w.Phonemes)));
 
     /// <summary>
-    /// Word-level timing here is a proportional-by-character-count placeholder, not real alignment -
-    /// see handoff §49/§50. It exists so a continuous phoneme stream can be built before an
-    /// alignment provider ever runs; it must be overwritten once real alignment is available.
+    /// Milestone 5: uses real per-word timing (from the transcription/alignment provider) when
+    /// it's available and lines up 1:1 with the phonemizer's word split; otherwise falls back to
+    /// the proportional-by-character-count placeholder from earlier milestones (handoff §49/§50:
+    /// predicted vs actual pronunciation/timing). The counts can disagree - WhisperX's own
+    /// tokenization doesn't always match TextNormalizer.Tokenize exactly (contractions, numbers) -
+    /// and silently misaligning word N's real timing to phonemized word M would be worse than the
+    /// honest placeholder, so any mismatch just falls back rather than guessing.
     /// </summary>
     private static List<CoreModels.Word> BuildWords(
         Guid segmentId,
         IReadOnlyList<PhonemizedWord> phonemizedWords,
         double startSeconds,
-        double endSeconds)
+        double endSeconds,
+        IReadOnlyList<ParsedWord>? realWords)
     {
         if (phonemizedWords.Count == 0)
         {
             return [];
         }
 
+        return realWords is not null && realWords.Count == phonemizedWords.Count
+            ? BuildWordsFromRealTiming(segmentId, phonemizedWords, realWords)
+            : BuildWordsFromInterpolation(segmentId, phonemizedWords, startSeconds, endSeconds);
+    }
+
+    private static List<CoreModels.Word> BuildWordsFromRealTiming(
+        Guid segmentId, IReadOnlyList<PhonemizedWord> phonemizedWords, IReadOnlyList<ParsedWord> realWords)
+    {
+        var words = new List<CoreModels.Word>(phonemizedWords.Count);
+
+        for (var i = 0; i < phonemizedWords.Count; i++)
+        {
+            var phonemizedWord = phonemizedWords[i];
+
+            words.Add(new CoreModels.Word
+            {
+                Id = Guid.NewGuid(),
+                SegmentId = segmentId,
+                Sequence = i,
+                Text = phonemizedWord.Text,
+                NormalizedText = phonemizedWord.Text,
+                Ipa = phonemizedWord.Ipa,
+                PhonemeSequence = string.Join(' ', phonemizedWord.Phonemes),
+                StartSeconds = realWords[i].StartSeconds,
+                EndSeconds = realWords[i].EndSeconds,
+            });
+        }
+
+        return words;
+    }
+
+    private static List<CoreModels.Word> BuildWordsFromInterpolation(
+        Guid segmentId, IReadOnlyList<PhonemizedWord> phonemizedWords, double startSeconds, double endSeconds)
+    {
         var totalChars = phonemizedWords.Sum(w => w.Text.Length);
         var duration = endSeconds - startSeconds;
         var cursor = startSeconds;

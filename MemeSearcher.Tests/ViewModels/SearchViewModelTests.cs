@@ -44,7 +44,10 @@ public class SearchViewModelTests : IDisposable
         var searchService = new Infrastructure.Search.PhoneticSearchService(dbContextFactory, phonemizer);
         var compositeSearchService = new Infrastructure.Search.CompositeSearchService(dbContextFactory, phonemizer);
         var libraryService = new LibraryService(dbContextFactory);
-        var viewModel = new SearchViewModel(searchService, compositeSearchService, phonemizer, libraryService, new FakeMediaPlayerLauncher(), new FakeClipboardService());
+        var viewModel = new SearchViewModel(
+            searchService, compositeSearchService, phonemizer, libraryService,
+            new FakeMediaPlayerLauncher(), new FakeClipboardService(),
+            new FFmpegClipExtractor(new FFmpegToolLocator()), new FakeFilePickerService());
 
         return (viewModel, dbContextFactory, phonemizer);
     }
@@ -182,7 +185,9 @@ public class SearchViewModelTests : IDisposable
             phonemizer,
             new LibraryService(dbContextFactory),
             new FakeMediaPlayerLauncher(),
-            new FakeClipboardService());
+            new FakeClipboardService(),
+            new FFmpegClipExtractor(new FFmpegToolLocator()),
+            new FakeFilePickerService());
 
         Assert.False(viewModel.SearchCommand.CanExecute(null));
 

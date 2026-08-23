@@ -1,46 +1,61 @@
 using System;
+using System.IO;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using MemeSearcher.Core.Interfaces;
 using MemeSearcher.Core.Search;
+using MemeSearcher.Infrastructure.Ffmpeg;
 using MemeSearcher.Services;
 
 namespace MemeSearcher.ViewModels;
 
 /// <summary>
 /// Display-formatted projection of a Core SearchResult (handoff §45: raw distance is never the
-/// user-facing number) plus result interaction (handoff §21): play/seek and copy actions.
+/// user-facing number) plus result interaction (handoff §21): play/seek, copy, and (Milestone 5)
+/// clip export actions.
 /// </summary>
 public partial class SearchResultRowViewModel : ObservableObject
 {
     private readonly IMediaPlayerLauncher _playerLauncher;
     private readonly IClipboardService _clipboard;
+    private readonly FFmpegClipExtractor _clipExtractor;
+    private readonly IFilePickerService _filePicker;
 
     public Guid MediaId { get; }
     public double StartSeconds { get; }
+    public double EndSeconds { get; }
     public string ScoreDisplay { get; }
     public string TimeRangeDisplay { get; }
     public string SourceText { get; }
     public string Ipa { get; }
     public string PhonemesDisplay { get; }
 
-    // Resolved after construction (batched across all results by SearchViewModel), so the Play
-    // button's enabled state has to react to it arriving.
+    // Resolved after construction (batched across all results by SearchViewModel), so the
+    // Play/Export buttons' enabled state has to react to it arriving.
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(PlayCommand))]
+    [NotifyCanExecuteChangedFor(nameof(ExportClipCommand))]
     private string? _mediaPath;
 
     [ObservableProperty]
     private string _playbackStatus = "";
 
-    public SearchResultRowViewModel(SearchResult result, IMediaPlayerLauncher playerLauncher, IClipboardService clipboard)
+    public SearchResultRowViewModel(
+        SearchResult result,
+        IMediaPlayerLauncher playerLauncher,
+        IClipboardService clipboard,
+        FFmpegClipExtractor clipExtractor,
+        IFilePickerService filePicker)
     {
         _playerLauncher = playerLauncher;
         _clipboard = clipboard;
+        _clipExtractor = clipExtractor;
+        _filePicker = filePicker;
 
         MediaId = result.MediaId;
         StartSeconds = result.StartSeconds;
+        EndSeconds = result.EndSeconds;
         ScoreDisplay = $"{result.Score:P0}";
         TimeRangeDisplay = $"{FormatTimestamp(result.StartSeconds)} - {FormatTimestamp(result.EndSeconds)}";
         SourceText = result.SourceText;
@@ -68,6 +83,33 @@ public partial class SearchResultRowViewModel : ObservableObject
     }
 
     private bool CanPlay() => MediaPath is not null;
+
+    [RelayCommand(CanExecute = nameof(CanExportClip))]
+    private async Task ExportClipAsync()
+    {
+        if (MediaPath is null)
+        {
+            return;
+        }
+
+        var extension = Path.GetExtension(MediaPath) is { Length: > 0 } ext ? ext : ".mp4";
+        var suggestedName = $"{SourceText.Replace(' ', '_')}{extension}";
+
+        var outputPath = await _filePicker.PickClipExportPathAsync(suggestedName);
+        if (outputPath is null)
+        {
+            return;
+        }
+
+        PlaybackStatus = "Exporting clip...";
+        var result = await _clipExtractor.ExtractAsync(MediaPath, StartSeconds, EndSeconds, outputPath);
+
+        PlaybackStatus = result.Success
+            ? $"Exported to {Path.GetFileName(outputPath)}."
+            : $"Export failed: {result.Error}";
+    }
+
+    private bool CanExportClip() => MediaPath is not null;
 
     [RelayCommand]
     private Task CopyTimestampAsync() => _clipboard.SetTextAsync(FormatTimestamp(StartSeconds));

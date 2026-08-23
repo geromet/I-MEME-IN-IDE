@@ -66,8 +66,13 @@ public partial class App : Application
         // directly instead.
         services.AddSingleton<WhisperXToolLocator>();
         services.AddSingleton<ITranscriptionProvider, WhisperXTranscriptionProvider>();
+        // Milestone 5: standalone alignment provider (not yet wired into MediaIngestionService's
+        // file-transcript path - see issue tracking for why). Registered so it's available/testable.
+        services.AddSingleton<IAlignmentProvider, WhisperXAlignmentProvider>();
         services.AddSingleton<FFprobeToolLocator>();
         services.AddSingleton<MediaMetadataProbe>();
+        services.AddSingleton<FFmpegToolLocator>();
+        services.AddSingleton<FFmpegClipExtractor>();
 
         services.AddScoped<IPhoneticSearchService, PhoneticSearchService>();
         services.AddScoped<ICompositeSearchService, CompositeSearchService>();

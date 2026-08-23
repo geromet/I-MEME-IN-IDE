@@ -37,4 +37,21 @@ public class AvaloniaFilePickerService : IFilePickerService
 
         return files.Select(f => f.TryGetLocalPath()).Where(p => p is not null).Cast<string>().ToList();
     }
+
+    public async Task<string?> PickClipExportPathAsync(string suggestedFileName)
+    {
+        var window = (Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.MainWindow;
+        if (window is null)
+        {
+            return null;
+        }
+
+        var file = await window.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        {
+            Title = "Export clip",
+            SuggestedFileName = suggestedFileName,
+        });
+
+        return file?.TryGetLocalPath();
+    }
 }

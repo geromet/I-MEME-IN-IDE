@@ -167,6 +167,85 @@ public class MediaIngestionServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task ImportAsync_WithRealWordTimingFromTheProvider_UsesItInsteadOfInterpolating()
+    {
+        var mediaPath = Path.Combine(_tempDir, "clip.mp4");
+        await File.WriteAllTextAsync(mediaPath, "not a real video, just needs to exist");
+
+        var phonemizer = await CreatePhonemizerIfAvailableAsync();
+        if (phonemizer is null)
+        {
+            return;
+        }
+
+        // Deliberately uneven real timing that the character-proportional interpolation would
+        // never produce on its own - proves the real values are actually used, not recomputed.
+        var fakeTranscription = new FakeTranscriptionProvider([
+            new(0.5, 2.0, "a long bus", [
+                new("a", 0.5, 0.6),
+                new("long", 0.6, 1.9),
+                new("bus", 1.9, 2.0),
+            ]),
+        ]);
+
+        await using var context = CreateContext();
+        var service = new MediaIngestionService(
+            context, TranscriptParserFactory.CreateDefault(), phonemizer, fakeTranscription, new MediaMetadataProbe(new FFprobeToolLocator()));
+
+        var result = await service.ImportAsync(new MediaIngestionRequest(mediaPath, null, "en-US"));
+
+        var storedTranscript = await context.Transcripts
+            .Include(t => t.Segments)
+            .ThenInclude(s => s.Words)
+            .SingleAsync(t => t.MediaId == result.Media.Id);
+
+        var words = Assert.Single(storedTranscript.Segments).Words;
+        Assert.Equal(0.5, words[0].StartSeconds);
+        Assert.Equal(0.6, words[0].EndSeconds);
+        Assert.Equal(0.6, words[1].StartSeconds);
+        Assert.Equal(1.9, words[1].EndSeconds);
+        Assert.Equal(1.9, words[2].StartSeconds);
+        Assert.Equal(2.0, words[2].EndSeconds);
+    }
+
+    [Fact]
+    public async Task ImportAsync_WhenRealWordCountDoesNotMatchPhonemizedCount_FallsBackToInterpolation()
+    {
+        var mediaPath = Path.Combine(_tempDir, "clip.mp4");
+        await File.WriteAllTextAsync(mediaPath, "not a real video, just needs to exist");
+
+        var phonemizer = await CreatePhonemizerIfAvailableAsync();
+        if (phonemizer is null)
+        {
+            return;
+        }
+
+        // Only 2 "real" words given for a 3-word phrase - a mismatch that must not be guessed at.
+        var fakeTranscription = new FakeTranscriptionProvider([
+            new(0.5, 2.0, "a long bus", [
+                new("a long", 0.5, 1.0),
+                new("bus", 1.9, 2.0),
+            ]),
+        ]);
+
+        await using var context = CreateContext();
+        var service = new MediaIngestionService(
+            context, TranscriptParserFactory.CreateDefault(), phonemizer, fakeTranscription, new MediaMetadataProbe(new FFprobeToolLocator()));
+
+        var result = await service.ImportAsync(new MediaIngestionRequest(mediaPath, null, "en-US"));
+
+        var storedTranscript = await context.Transcripts
+            .Include(t => t.Segments)
+            .ThenInclude(s => s.Words)
+            .SingleAsync(t => t.MediaId == result.Media.Id);
+
+        var words = Assert.Single(storedTranscript.Segments).Words;
+        Assert.Equal(3, words.Count); // phonemizer's own split, not the mismatched "real" word count
+        Assert.Equal(0.5, words[0].StartSeconds); // interpolation still starts/ends at the cue bounds
+        Assert.Equal(2.0, words[^1].EndSeconds);
+    }
+
+    [Fact]
     public async Task ImportAsync_NeitherMediaPathNorTranscriptPathThrows()
     {
         var phonemizer = await CreatePhonemizerIfAvailableAsync();

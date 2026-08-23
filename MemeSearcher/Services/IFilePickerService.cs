@@ -17,4 +17,7 @@ public interface IFilePickerService
     /// which is which by extension.
     /// </summary>
     Task<IReadOnlyList<string>> PickMediaFilesAsync();
+
+    /// <summary>Milestone 5: where to save an extracted clip. Returns null if the user cancelled.</summary>
+    Task<string?> PickClipExportPathAsync(string suggestedFileName);
 }

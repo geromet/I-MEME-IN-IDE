@@ -24,6 +24,8 @@ public class LibraryViewModelTests : IDisposable
     private class StubFilePickerService(params IReadOnlyList<string> paths) : IFilePickerService
     {
         public Task<IReadOnlyList<string>> PickMediaFilesAsync() => Task.FromResult(paths);
+
+        public Task<string?> PickClipExportPathAsync(string suggestedFileName) => Task.FromResult<string?>(null);
     }
 
     private async Task<LibraryViewModel?> TrySetUpAsync(params IReadOnlyList<string> pickedFilePaths)

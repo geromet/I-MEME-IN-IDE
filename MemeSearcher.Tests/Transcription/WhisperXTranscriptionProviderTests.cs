@@ -45,6 +45,35 @@ public class WhisperXTranscriptionProviderTests
         Assert.Equal(2.06, segments[0].EndSeconds);
         Assert.Equal("Hello world.", segments[0].Text); // leading space trimmed
         Assert.Equal("This is a test.", segments[1].Text);
+
+        // Milestone 5: word-level timing from the same JSON.
+        Assert.NotNull(segments[0].Words);
+        Assert.Equal(2, segments[0].Words!.Count);
+        Assert.Equal("Hello", segments[0].Words![0].Text);
+        Assert.Equal(0.03, segments[0].Words![0].StartSeconds);
+        Assert.Equal(0.5, segments[0].Words![0].EndSeconds);
+        Assert.Null(segments[1].Words); // empty "words" array -> no usable word data
+    }
+
+    [Fact]
+    public void ParseSegments_SkipsWordsThatFailedAlignment()
+    {
+        // Real WhisperX gotcha: a word can appear with just "word" and no "start"/"end" when
+        // alignment failed for it specifically.
+        const string json = """
+            {"segments": [{"start": 0, "end": 2, "text": "a b c", "words": [
+                {"word": "a", "start": 0.0, "end": 0.3},
+                {"word": "b"},
+                {"word": "c", "start": 0.6, "end": 0.9}
+            ]}]}
+            """;
+
+        var segments = WhisperXTranscriptionProvider.ParseSegments(json);
+
+        var words = Assert.Single(segments).Words;
+        Assert.NotNull(words);
+        Assert.Equal(2, words!.Count);
+        Assert.Equal(["a", "c"], words.Select(w => w.Text));
     }
 
     [Fact]
@@ -82,6 +111,24 @@ public class WhisperXTranscriptionProviderTests
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(
             () => provider.TranscribeAsync("/some/media.mp4", "en", CancellationToken.None));
+
+        Assert.Contains("whisperx is not available", ex.Message);
+    }
+
+    [Fact]
+    public async Task WhisperXAlignmentProvider_ThrowsAClearErrorWhenWhisperXIsNotInstalled()
+    {
+        var locator = new WhisperXToolLocator();
+        var status = await locator.LocateAsync();
+        if (status.IsInstalled)
+        {
+            return;
+        }
+
+        var provider = new WhisperXAlignmentProvider(locator);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => provider.AlignAsync("/some/media.mp4", "hello world", CancellationToken.None));
 
         Assert.Contains("whisperx is not available", ex.Message);
     }

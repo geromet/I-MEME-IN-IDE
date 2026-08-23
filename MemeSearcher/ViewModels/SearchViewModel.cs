@@ -7,6 +7,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using MemeSearcher.Core.Interfaces;
 using MemeSearcher.Core.Search;
+using MemeSearcher.Infrastructure.Ffmpeg;
 using MemeSearcher.Infrastructure.Library;
 using MemeSearcher.Services;
 
@@ -18,7 +19,9 @@ public partial class SearchViewModel(
     IPhonemizer phonemizer,
     LibraryService libraryService,
     IMediaPlayerLauncher playerLauncher,
-    IClipboardService clipboard) : ViewModelBase
+    IClipboardService clipboard,
+    FFmpegClipExtractor clipExtractor,
+    IFilePickerService filePicker) : ViewModelBase
 {
     // No language selector yet (handoff §34 leaves room for one) - en-US is the only phonemizer
     // language exercised so far.
@@ -86,7 +89,7 @@ public partial class SearchViewModel(
         Results.Clear();
         foreach (var result in results)
         {
-            var row = new SearchResultRowViewModel(result, playerLauncher, clipboard)
+            var row = new SearchResultRowViewModel(result, playerLauncher, clipboard, clipExtractor, filePicker)
             {
                 MediaPath = mediaPaths.GetValueOrDefault(result.MediaId),
             };
@@ -103,13 +106,14 @@ public partial class SearchViewModel(
         Results.Clear();
 
         var results = await compositeSearchService.SearchAsync(QueryText, Language, new SearchScope.AllIndexedMedia());
-        var allMediaIds = results.SelectMany(r => r.Components.Select(c => c.MediaId)).Distinct();
+        var allMediaIds = results.SelectMany(r => r.Components.Select(c => c.MediaId)).Distinct().ToList();
         var mediaTitles = await libraryService.GetTitlesAsync(allMediaIds);
+        var mediaPaths = await libraryService.GetPathsAsync(allMediaIds);
 
         CompositeResults.Clear();
         foreach (var result in results)
         {
-            CompositeResults.Add(new CompositeSearchResultRowViewModel(result, mediaTitles));
+            CompositeResults.Add(new CompositeSearchResultRowViewModel(result, mediaTitles, mediaPaths, clipExtractor, filePicker));
         }
 
         StatusMessage = CompositeResults.Count > 0

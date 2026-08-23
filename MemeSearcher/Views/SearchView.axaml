@@ -36,6 +36,7 @@
 
                             <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,4,0,0">
                                 <Button Content="▶ Play" Command="{Binding PlayCommand}" />
+                                <Button Content="Export clip..." Command="{Binding ExportClipCommand}" />
                                 <Button Content="Copy timestamp" Command="{Binding CopyTimestampCommand}" />
                                 <Button Content="Copy text" Command="{Binding CopyTextCommand}" />
                                 <Button Content="Copy IPA" Command="{Binding CopyIpaCommand}" />
@@ -56,7 +57,9 @@
                             <StackPanel Orientation="Horizontal" Spacing="12">
                                 <TextBlock Text="{Binding ScoreDisplay}" FontWeight="Bold" />
                                 <TextBlock Text="{Binding SourceCountDisplay}" Opacity="0.7" />
+                                <Button Content="Export assembled clip..." Command="{Binding ExportClipCommand}" />
                             </StackPanel>
+                            <TextBlock Text="{Binding ExportStatus}" Opacity="0.6" FontSize="11" />
 
                             <ItemsControl ItemsSource="{Binding Components}">
                                 <ItemsControl.ItemTemplate>

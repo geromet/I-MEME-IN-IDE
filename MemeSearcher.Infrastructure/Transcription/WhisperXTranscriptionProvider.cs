@@ -10,11 +10,12 @@ namespace MemeSearcher.Infrastructure.Transcription;
 /// script, shell out to the installed tool and parse its output. WhisperX decodes audio/video
 /// itself (via ffmpeg internally), so this needs no separate audio-extraction step - handoff §25
 /// keeps ITranscriptionProvider and IAlignmentProvider conceptually distinct, but WhisperX's own
-/// CLI happens to do both; this class only claims the transcription half (segment-level text +
-/// timing). Word-level timestamps that whisperx also produces aren't consumed here - the existing
-/// phonemizer-driven word split/interpolation (handoff §49/50: predicted vs actual pronunciation)
-/// already covers "no real per-word alignment yet"; consuming whisperx's word timing is a natural
-/// follow-up, not required to get transcription working.
+/// CLI happens to do both in one pass; this class exposes both halves of that one invocation
+/// (segment-level text/timing, and - Milestone 5 - the per-word alignment WhisperX already
+/// computed as part of producing the transcript) rather than throwing the word data away and
+/// making a caller re-run whisperx separately just to get it. A genuinely separate
+/// WhisperXAlignmentProvider still exists for the case where the transcript came from somewhere
+/// else entirely (e.g. an imported SRT) and needs aligning against audio on its own.
 /// </summary>
 public class WhisperXTranscriptionProvider(WhisperXToolLocator toolLocator) : ITranscriptionProvider
 {
@@ -60,8 +61,11 @@ public class WhisperXTranscriptionProvider(WhisperXToolLocator toolLocator) : IT
 
     /// <summary>
     /// Parses whisperx's `--output_format json` output: a top-level "segments" array, each with
-    /// "start"/"end"/"text" (documented WhisperX output shape). Deliberately ignores the
-    /// per-segment "words" array - see class remarks.
+    /// "start"/"end"/"text" and (Milestone 5) a "words" array of {"word","start","end","score"}.
+    /// A word can be present without "start"/"end" when WhisperX's alignment step failed for that
+    /// specific word (a known real-world gotcha, not hypothetical) - those are skipped rather than
+    /// guessed at, since MediaIngestionService's interpolation fallback already handles "no real
+    /// timing for this word" gracefully when the word count doesn't line up.
     /// </summary>
     public static IReadOnlyList<TranscribedSegment> ParseSegments(string whisperXJson)
     {
@@ -88,10 +92,37 @@ public class WhisperXTranscriptionProvider(WhisperXToolLocator toolLocator) : IT
                 continue;
             }
 
-            result.Add(new TranscribedSegment(startProp.GetDouble(), endProp.GetDouble(), text));
+            var words = segment.TryGetProperty("words", out var wordsProp) ? ParseWords(wordsProp) : null;
+
+            result.Add(new TranscribedSegment(startProp.GetDouble(), endProp.GetDouble(), text, words));
         }
 
         return result;
+    }
+
+    private static IReadOnlyList<TranscribedWord>? ParseWords(JsonElement wordsProp)
+    {
+        var words = new List<TranscribedWord>();
+
+        foreach (var word in wordsProp.EnumerateArray())
+        {
+            if (!word.TryGetProperty("word", out var wordTextProp) ||
+                !word.TryGetProperty("start", out var startProp) ||
+                !word.TryGetProperty("end", out var endProp))
+            {
+                continue; // Alignment failed for this word - no timing to use.
+            }
+
+            var text = wordTextProp.GetString()?.Trim() ?? "";
+            if (text.Length == 0)
+            {
+                continue;
+            }
+
+            words.Add(new TranscribedWord(text, startProp.GetDouble(), endProp.GetDouble()));
+        }
+
+        return words.Count > 0 ? words : null;
     }
 
     private static async Task RunWhisperXAsync(
