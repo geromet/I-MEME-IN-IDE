@@ -63,6 +63,7 @@ public class SearchBenchmarks(ITestOutputHelper output) : IDisposable
     [Theory]
     [InlineData(10)]
     [InlineData(100)]
+    [InlineData(400)]
     [InlineData(1000)]
     public async Task Baseline(int mediaCount)
     {
