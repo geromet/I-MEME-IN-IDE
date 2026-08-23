@@ -41,11 +41,13 @@ public class SearchViewModelTests : IDisposable
         }
 
         var phonemizer = new EspeakPhonemizer(locator);
-        var searchService = new Infrastructure.Search.PhoneticSearchService(dbContextFactory, phonemizer);
-        var compositeSearchService = new Infrastructure.Search.CompositeSearchService(dbContextFactory, phonemizer);
+        var queryCache = new Infrastructure.Search.InMemoryQueryPhonemizationCache();
+        var searchService = new Infrastructure.Search.PhoneticSearchService(dbContextFactory, phonemizer, queryCache);
+        var compositeSearchService = new Infrastructure.Search.CompositeSearchService(dbContextFactory, phonemizer, queryCache);
         var libraryService = new LibraryService(dbContextFactory);
+        var searchHistoryService = new Infrastructure.Search.SearchHistoryService(dbContextFactory);
         var viewModel = new SearchViewModel(
-            searchService, compositeSearchService, phonemizer, libraryService,
+            searchService, compositeSearchService, phonemizer, queryCache, searchHistoryService, libraryService,
             new FakeMediaPlayerLauncher(), new FakeClipboardService(),
             new FFmpegClipExtractor(new FFmpegToolLocator()), new FakeFilePickerService());
 
@@ -122,6 +124,48 @@ public class SearchViewModelTests : IDisposable
     }
 
     [Fact]
+    public async Task SearchAsync_RecordsSearchHistoryAndSupportsRerunningIt()
+    {
+        var setup = await TrySetUpAsync();
+        if (setup is null)
+        {
+            return;
+        }
+
+        var (viewModel, dbContextFactory, phonemizer) = setup.Value;
+
+        var srtPath = Path.Combine(_tempDir, "clip.srt");
+        await File.WriteAllTextAsync(srtPath, """
+            1
+            00:00:01,000 --> 00:00:02,000
+            a long bus
+
+            """);
+
+        var ingestion = new MediaIngestionService(await dbContextFactory.CreateDbContextAsync(), TranscriptParserFactory.CreateDefault(), phonemizer, new UnusedTranscriptionProvider(), new MediaMetadataProbe(new FFprobeToolLocator()));
+        await ingestion.ImportAsync(new MediaIngestionRequest(null, srtPath, "en-US"));
+
+        viewModel.QueryText = "among us";
+        await viewModel.SearchCommand.ExecuteAsync(null);
+
+        var entry = Assert.Single(viewModel.RecentSearches);
+        Assert.Equal("among us", entry.QueryText);
+        Assert.False(entry.IsComposite);
+        Assert.Equal(1, entry.ResultCount);
+
+        // Clear the current results, then rerun purely from the history entry - the entry alone
+        // (not any cached SearchViewModel state) must be enough to reproduce the search.
+        viewModel.QueryText = "";
+        viewModel.Results.Clear();
+
+        await viewModel.RerunSearchCommand.ExecuteAsync(entry);
+
+        Assert.Equal("among us", viewModel.QueryText);
+        Assert.Single(viewModel.Results);
+        Assert.Equal("a long bus", viewModel.Results[0].SourceText);
+    }
+
+    [Fact]
     public async Task SearchAsync_InCompositeMode_PopulatesCompositeResultsInsteadOfResults()
     {
         var setup = await TrySetUpAsync();
@@ -179,10 +223,13 @@ public class SearchViewModelTests : IDisposable
             .BuildServiceProvider()
             .GetRequiredService<IDbContextFactory<MemeSearcherDbContext>>();
 
+        var queryCache = new Infrastructure.Search.InMemoryQueryPhonemizationCache();
         var viewModel = new SearchViewModel(
-            new Infrastructure.Search.PhoneticSearchService(dbContextFactory, phonemizer),
-            new Infrastructure.Search.CompositeSearchService(dbContextFactory, phonemizer),
+            new Infrastructure.Search.PhoneticSearchService(dbContextFactory, phonemizer, queryCache),
+            new Infrastructure.Search.CompositeSearchService(dbContextFactory, phonemizer, queryCache),
             phonemizer,
+            queryCache,
+            new Infrastructure.Search.SearchHistoryService(dbContextFactory),
             new LibraryService(dbContextFactory),
             new FakeMediaPlayerLauncher(),
             new FakeClipboardService(),

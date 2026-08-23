@@ -14,7 +14,8 @@ namespace MemeSearcher.Infrastructure.Search;
 /// </summary>
 public class PhoneticSearchService(
     IDbContextFactory<MemeSearcherDbContext> dbContextFactory,
-    IPhonemizer phonemizer) : IPhoneticSearchService
+    IPhonemizer phonemizer,
+    IQueryPhonemizationCache queryCache) : IPhoneticSearchService
 {
     public async Task<IReadOnlyList<SearchResult>> SearchAsync(
         string queryText,
@@ -26,7 +27,8 @@ public class PhoneticSearchService(
     {
         options ??= PhoneticSearchOptions.ForMode(mode);
 
-        var phonemizedQuery = await phonemizer.PhonemizeAsync(queryText, language, cancellationToken);
+        var phonemizedQuery = await queryCache.GetOrAddAsync(
+            queryText, language, ct => phonemizer.PhonemizeAsync(queryText, language, ct), cancellationToken);
         var queryTokens = PhoneStreamBuilder.BuildQueryTokens(phonemizedQuery);
         var queryPhonemeCount = queryTokens.Count(t => !t.IsBoundary);
 

@@ -42,7 +42,7 @@ public class CompositeSearchServiceTests : IDisposable
         }
 
         var phonemizer = new EspeakPhonemizer(locator);
-        var service = new Infrastructure.Search.CompositeSearchService(dbContextFactory, phonemizer);
+        var service = new Infrastructure.Search.CompositeSearchService(dbContextFactory, phonemizer, new Infrastructure.Search.InMemoryQueryPhonemizationCache());
 
         return (service, phonemizer, dbContextFactory);
     }

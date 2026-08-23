@@ -10,6 +10,7 @@ public class MemeSearcherDbContext(DbContextOptions<MemeSearcherDbContext> optio
     public DbSet<Segment> Segments => Set<Segment>();
     public DbSet<Word> Words => Set<Word>();
     public DbSet<Phone> Phones => Set<Phone>();
+    public DbSet<SearchHistoryEntry> SearchHistory => Set<SearchHistoryEntry>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -76,6 +77,16 @@ public class MemeSearcherDbContext(DbContextOptions<MemeSearcherDbContext> optio
             entity.Property(p => p.Symbol).IsRequired();
 
             entity.HasIndex(p => new { p.WordId, p.Sequence });
+        });
+
+        modelBuilder.Entity<SearchHistoryEntry>(entity =>
+        {
+            entity.HasKey(h => h.Id);
+            entity.Property(h => h.QueryText).IsRequired();
+            entity.Property(h => h.Language).IsRequired();
+            entity.Property(h => h.ScopeDescription).IsRequired();
+
+            entity.HasIndex(h => h.SearchedAt);
         });
     }
 }

@@ -6,9 +6,11 @@ using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using MemeSearcher.Core.Interfaces;
+using MemeSearcher.Core.Models;
 using MemeSearcher.Core.Search;
 using MemeSearcher.Infrastructure.Ffmpeg;
 using MemeSearcher.Infrastructure.Library;
+using MemeSearcher.Infrastructure.Search;
 using MemeSearcher.Services;
 
 namespace MemeSearcher.ViewModels;
@@ -17,6 +19,8 @@ public partial class SearchViewModel(
     IPhoneticSearchService searchService,
     ICompositeSearchService compositeSearchService,
     IPhonemizer phonemizer,
+    IQueryPhonemizationCache queryCache,
+    SearchHistoryService searchHistoryService,
     LibraryService libraryService,
     IMediaPlayerLauncher playerLauncher,
     IClipboardService clipboard,
@@ -49,6 +53,8 @@ public partial class SearchViewModel(
 
     public ObservableCollection<CompositeSearchResultRowViewModel> CompositeResults { get; } = [];
 
+    public ObservableCollection<SearchHistoryEntry> RecentSearches { get; } = [];
+
     [RelayCommand(CanExecute = nameof(CanSearch))]
     private async Task SearchAsync()
     {
@@ -57,17 +63,20 @@ public partial class SearchViewModel(
 
         try
         {
-            var phonemized = await phonemizer.PhonemizeAsync(QueryText, Language);
+            // Milestone 7: goes through the same query-representation cache the search services
+            // use, so this call and the one inside SearchAsync/SearchCompositeAsync below (same
+            // query text/language, one request apart) don't phonemize the query twice.
+            var phonemized = await queryCache.GetOrAddAsync(
+                QueryText, Language, ct => phonemizer.PhonemizeAsync(QueryText, Language, ct));
             QueryIpa = phonemized.Ipa;
 
-            if (IsCompositeMode)
-            {
-                await SearchCompositeAsync();
-            }
-            else
-            {
-                await SearchSingleSourceAsync();
-            }
+            var resultCount = IsCompositeMode
+                ? await SearchCompositeAsync()
+                : await SearchSingleSourceAsync();
+
+            await searchHistoryService.RecordAsync(
+                QueryText, Language, IsCompositeMode, "All indexed media", resultCount);
+            await LoadRecentSearchesAsync();
         }
         catch (Exception ex)
         {
@@ -79,7 +88,27 @@ public partial class SearchViewModel(
         }
     }
 
-    private async Task SearchSingleSourceAsync()
+    [RelayCommand]
+    private async Task RerunSearchAsync(SearchHistoryEntry entry)
+    {
+        QueryText = entry.QueryText;
+        IsCompositeMode = entry.IsComposite;
+        await SearchAsync();
+    }
+
+    [RelayCommand]
+    public async Task LoadRecentSearchesAsync()
+    {
+        var recent = await searchHistoryService.GetRecentAsync();
+
+        RecentSearches.Clear();
+        foreach (var entry in recent)
+        {
+            RecentSearches.Add(entry);
+        }
+    }
+
+    private async Task<int> SearchSingleSourceAsync()
     {
         CompositeResults.Clear();
 
@@ -99,9 +128,11 @@ public partial class SearchViewModel(
         StatusMessage = Results.Count > 0
             ? $"{Results.Count} result(s)."
             : "No matches found.";
+
+        return Results.Count;
     }
 
-    private async Task SearchCompositeAsync()
+    private async Task<int> SearchCompositeAsync()
     {
         Results.Clear();
 
@@ -119,6 +150,8 @@ public partial class SearchViewModel(
         StatusMessage = CompositeResults.Count > 0
             ? $"{CompositeResults.Count} composite result(s)."
             : "No composite matches found.";
+
+        return CompositeResults.Count;
     }
 
     private bool CanSearch() => !IsBusy && !string.IsNullOrWhiteSpace(QueryText);

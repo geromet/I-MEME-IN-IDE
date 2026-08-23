@@ -80,9 +80,13 @@ public partial class App : Application
         services.AddSingleton<FFmpegToolLocator>();
         services.AddSingleton<FFmpegClipExtractor>();
 
+        // Milestone 7: shared across the app's lifetime (not per-scope) so repeat searches
+        // actually benefit from the cache instead of getting a fresh empty one each request.
+        services.AddSingleton<IQueryPhonemizationCache, InMemoryQueryPhonemizationCache>();
         services.AddScoped<IPhoneticSearchService, PhoneticSearchService>();
         services.AddScoped<ICompositeSearchService, CompositeSearchService>();
         services.AddScoped<LibraryService>();
+        services.AddScoped<SearchHistoryService>();
 
         services.AddSingleton<IFilePickerService, AvaloniaFilePickerService>();
         services.AddSingleton<IClipboardService, AvaloniaClipboardService>();

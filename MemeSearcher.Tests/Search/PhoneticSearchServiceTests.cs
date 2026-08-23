@@ -75,7 +75,7 @@ public class PhoneticSearchServiceTests : IDisposable
             """);
 
         var searchService = new Infrastructure.Search.PhoneticSearchService(
-            services.GetRequiredService<IDbContextFactory<MemeSearcherDbContext>>(), phonemizer);
+            services.GetRequiredService<IDbContextFactory<MemeSearcherDbContext>>(), phonemizer, new Infrastructure.Search.InMemoryQueryPhonemizationCache());
 
         var results = await searchService.SearchAsync("among us", "en-US", new SearchScope.AllIndexedMedia());
 
@@ -105,7 +105,7 @@ public class PhoneticSearchServiceTests : IDisposable
             """);
 
         var searchService = new Infrastructure.Search.PhoneticSearchService(
-            services.GetRequiredService<IDbContextFactory<MemeSearcherDbContext>>(), phonemizer);
+            services.GetRequiredService<IDbContextFactory<MemeSearcherDbContext>>(), phonemizer, new Infrastructure.Search.InMemoryQueryPhonemizationCache());
 
         var results = await searchService.SearchAsync("ice cream", "en-US", new SearchScope.AllIndexedMedia());
 
@@ -133,7 +133,7 @@ public class PhoneticSearchServiceTests : IDisposable
             """);
 
         var searchService = new Infrastructure.Search.PhoneticSearchService(
-            services.GetRequiredService<IDbContextFactory<MemeSearcherDbContext>>(), phonemizer);
+            services.GetRequiredService<IDbContextFactory<MemeSearcherDbContext>>(), phonemizer, new Infrastructure.Search.InMemoryQueryPhonemizationCache());
 
         var results = await searchService.SearchAsync("supercalifragilisticexpialidocious", "en-US", new SearchScope.AllIndexedMedia());
 
@@ -160,7 +160,7 @@ public class PhoneticSearchServiceTests : IDisposable
             """);
 
         var searchService = new Infrastructure.Search.PhoneticSearchService(
-            services.GetRequiredService<IDbContextFactory<MemeSearcherDbContext>>(), phonemizer);
+            services.GetRequiredService<IDbContextFactory<MemeSearcherDbContext>>(), phonemizer, new Infrastructure.Search.InMemoryQueryPhonemizationCache());
 
         var results = await searchService.SearchAsync("zzyzx blorp", "en-US", new SearchScope.AllIndexedMedia());
 
@@ -198,7 +198,7 @@ public class PhoneticSearchServiceTests : IDisposable
         Assert.Equal(2, mediaIds.Count);
 
         var searchService = new Infrastructure.Search.PhoneticSearchService(
-            services.GetRequiredService<IDbContextFactory<MemeSearcherDbContext>>(), phonemizer);
+            services.GetRequiredService<IDbContextFactory<MemeSearcherDbContext>>(), phonemizer, new Infrastructure.Search.InMemoryQueryPhonemizationCache());
 
         var results = await searchService.SearchAsync("among us", "en-US", new SearchScope.SingleMedia(mediaIds[0]));
 
