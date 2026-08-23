@@ -1,5 +1,7 @@
 using MemeSearcher.Infrastructure.Processes;
+using MemeSearcher.Infrastructure.Settings;
 using MemeSearcher.Infrastructure.Transcription;
+using MemeSearcher.Tests.TestDoubles;
 
 namespace MemeSearcher.Tests.Transcription;
 
@@ -107,7 +109,8 @@ public class WhisperXTranscriptionProviderTests
             return; // Can't exercise the "tool missing" path on a machine that has it.
         }
 
-        var provider = new WhisperXTranscriptionProvider(locator);
+        var provider = new WhisperXTranscriptionProvider(
+            locator, new InMemorySettingsStore(), new WhisperXSettings(new CudaAvailabilityProbe()));
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(
             () => provider.TranscribeAsync("/some/media.mp4", "en", CancellationToken.None));

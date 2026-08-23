@@ -6,12 +6,13 @@ using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using MemeSearcher.Core.Interfaces;
-using MemeSearcher.Core.Languages;
+using MemeSearcher.Core.Settings;
 using MemeSearcher.Core.Models;
 using MemeSearcher.Core.Search;
 using MemeSearcher.Infrastructure.Ffmpeg;
 using MemeSearcher.Infrastructure.Library;
 using MemeSearcher.Infrastructure.Search;
+using MemeSearcher.Infrastructure.Settings;
 using MemeSearcher.Services;
 
 namespace MemeSearcher.ViewModels;
@@ -26,12 +27,13 @@ public partial class SearchViewModel(
     IMediaPlayerLauncher playerLauncher,
     IClipboardService clipboard,
     FFmpegClipExtractor clipExtractor,
-    IFilePickerService filePicker) : ViewModelBase
+    IFilePickerService filePicker,
+    ISettingsStore settings) : ViewModelBase
 {
-    // No language selector yet - that arrives with the settings surface (#24). Until then this
-    // reads the shared catalog default rather than holding its own literal, so it cannot drift
-    // from LibraryViewModel's the way two separate "en-US" constants did (#23).
-    private static string Language => LanguageCatalog.Default.Id;
+    // Read from settings, not a constant (#24). A query must be phonemized in the same language
+    // the corpus was ingested with, and both this and LibraryViewModel read the same setting - so
+    // they cannot drift the way two separate "en-US" constants did (#23).
+    private string Language => settings.Get(WhisperXSettings.Language);
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(SearchCommand))]

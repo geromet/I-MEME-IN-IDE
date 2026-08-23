@@ -51,7 +51,8 @@ public class LibraryViewModelTests : IDisposable
         var ingestion = new MediaIngestionService(await dbContextFactory.CreateDbContextAsync(), TranscriptParserFactory.CreateDefault(), phonemizer, new UnusedTranscriptionProvider(), new MediaMetadataProbe(new FFprobeToolLocator()));
         var libraryService = new LibraryService(dbContextFactory);
 
-        return new LibraryViewModel(libraryService, ingestion, new StubFilePickerService(pickedFilePaths));
+        return new LibraryViewModel(
+            libraryService, ingestion, new StubFilePickerService(pickedFilePaths), new InMemorySettingsStore());
     }
 
     [Fact]

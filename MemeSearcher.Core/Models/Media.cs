@@ -27,6 +27,21 @@ public class Media
     public DateTimeOffset UpdatedAt { get; set; }
     public int ProcessingVersion { get; set; }
 
+    /// <summary>
+    /// What produced this item's transcript, when it came from a transcription run (#24). Null for
+    /// transcript-only imports, where the answer is "some other tool, elsewhere".
+    ///
+    /// Stored on the media row rather than read back from settings because settings change and
+    /// already-ingested data must not silently re-describe itself: a corpus half-transcribed with
+    /// `tiny` and half with `large-v3` is not internally comparable, and this is the only thing
+    /// that says so.
+    /// </summary>
+    public string? TranscriptionModel { get; set; }
+
+    public string? TranscriptionDevice { get; set; }
+
+    public string? TranscriptionComputeType { get; set; }
+
     public long FileSize { get; set; }
     public DateTimeOffset LastModified { get; set; }
     public required string ContentHash { get; set; }

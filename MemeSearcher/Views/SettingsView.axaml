@@ -1,0 +1,70 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:MemeSearcher.ViewModels"
+             xmlns:settings="using:MemeSearcher.Core.Settings"
+             mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="550"
+             x:Class="MemeSearcher.Views.SettingsView"
+             x:DataType="vm:SettingsViewModel">
+    <Grid Margin="16" RowDefinitions="Auto,Auto,*">
+        <TextBlock Grid.Row="0" Text="Settings" FontSize="20" FontWeight="Bold" />
+
+        <Border Grid.Row="1"
+                Margin="0,12,0,0"
+                Padding="10"
+                CornerRadius="4"
+                Background="#33C04040"
+                IsVisible="{Binding HasValidationMessage}">
+            <TextBlock Text="{Binding ValidationMessage}" TextWrapping="Wrap" />
+        </Border>
+
+        <ScrollViewer Grid.Row="2" Margin="0,12,0,0">
+            <ItemsControl ItemsSource="{Binding Categories}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:SettingsCategoryViewModel">
+                        <StackPanel Margin="0,0,0,20" Spacing="4">
+                            <TextBlock Text="{Binding Name}" FontSize="16" FontWeight="Bold" />
+                            <TextBlock Text="{Binding Description}" Opacity="0.7" TextWrapping="Wrap" />
+
+                            <ItemsControl ItemsSource="{Binding Settings}" Margin="0,8,0,0">
+                                <ItemsControl.DataTemplates>
+                                    <DataTemplate DataType="vm:ChoiceSettingViewModel">
+                                        <StackPanel Margin="0,0,0,12" Spacing="3">
+                                            <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" />
+                                            <ComboBox ItemsSource="{Binding Choices}"
+                                                      SelectedItem="{Binding SelectedChoice}"
+                                                      MinWidth="260">
+                                                <ComboBox.ItemTemplate>
+                                                    <DataTemplate x:DataType="settings:SettingChoice">
+                                                        <TextBlock Text="{Binding DisplayName}" />
+                                                    </DataTemplate>
+                                                </ComboBox.ItemTemplate>
+                                            </ComboBox>
+                                            <TextBlock Text="{Binding Description}" Opacity="0.6" FontSize="11" TextWrapping="Wrap" MaxWidth="520" HorizontalAlignment="Left" />
+                                        </StackPanel>
+                                    </DataTemplate>
+
+                                    <DataTemplate DataType="vm:ToggleSettingViewModel">
+                                        <StackPanel Margin="0,0,0,12" Spacing="3">
+                                            <CheckBox Content="{Binding DisplayName}" IsChecked="{Binding IsEnabled}" />
+                                            <TextBlock Text="{Binding Description}" Opacity="0.6" FontSize="11" TextWrapping="Wrap" MaxWidth="520" HorizontalAlignment="Left" />
+                                        </StackPanel>
+                                    </DataTemplate>
+
+                                    <DataTemplate DataType="vm:TextSettingViewModel">
+                                        <StackPanel Margin="0,0,0,12" Spacing="3">
+                                            <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" />
+                                            <TextBox Text="{Binding Value}" MinWidth="260" HorizontalAlignment="Left" />
+                                            <TextBlock Text="{Binding Description}" Opacity="0.6" FontSize="11" TextWrapping="Wrap" MaxWidth="520" HorizontalAlignment="Left" />
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ItemsControl.DataTemplates>
+                            </ItemsControl>
+                        </StackPanel>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+    </Grid>
+</UserControl>

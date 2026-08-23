@@ -3,6 +3,7 @@ using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using MemeSearcher.Core.Interfaces;
+using MemeSearcher.Core.Settings;
 using MemeSearcher.Infrastructure.Alignment;
 using MemeSearcher.Infrastructure.Database;
 using MemeSearcher.Infrastructure.Ffmpeg;
@@ -10,6 +11,7 @@ using MemeSearcher.Infrastructure.Library;
 using MemeSearcher.Infrastructure.Phonetics;
 using MemeSearcher.Infrastructure.Processes;
 using MemeSearcher.Infrastructure.Search;
+using MemeSearcher.Infrastructure.Settings;
 using MemeSearcher.Infrastructure.Transcription;
 using MemeSearcher.Services;
 using MemeSearcher.ViewModels;
@@ -55,6 +57,16 @@ public partial class App : Application
         services.AddDbContextFactory<MemeSearcherDbContext>(options =>
             options.UseSqlite(DatabasePathProvider.GetDefaultConnectionString()));
 
+        // Milestone 19 (#24): settings are a singleton store plus a set of categories resolved as
+        // IEnumerable<ISettingsCategory> - so a new category is one AddSingleton call and the
+        // Settings UI never changes. Note this is also the pattern #16 wants for tool locators:
+        // resolving a collection has none of the one-implementation-per-interface problem.
+        services.AddSingleton<ISettingsStore>(_ => JsonSettingsStore.CreateDefault());
+        services.AddSingleton<CudaAvailabilityProbe>();
+        services.AddSingleton<WhisperXSettings>();
+        services.AddSingleton<ISettingsCategory>(sp => sp.GetRequiredService<WhisperXSettings>());
+        services.AddSingleton<SettingsRegistry>();
+
         services.AddSingleton(TranscriptParserFactory.CreateDefault());
         services.AddScoped<MediaIngestionService>();
 
@@ -94,6 +106,7 @@ public partial class App : Application
 
         services.AddTransient<SearchViewModel>();
         services.AddTransient<LibraryViewModel>();
+        services.AddTransient<SettingsViewModel>();
         services.AddTransient<MainWindowViewModel>();
         services.AddTransient<MainWindow>();
 

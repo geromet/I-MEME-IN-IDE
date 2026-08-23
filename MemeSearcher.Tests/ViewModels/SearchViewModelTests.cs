@@ -49,7 +49,8 @@ public class SearchViewModelTests : IDisposable
         var viewModel = new SearchViewModel(
             searchService, compositeSearchService, phonemizer, queryCache, searchHistoryService, libraryService,
             new FakeMediaPlayerLauncher(), new FakeClipboardService(),
-            new FFmpegClipExtractor(new FFmpegToolLocator()), new FakeFilePickerService());
+            new FFmpegClipExtractor(new FFmpegToolLocator()), new FakeFilePickerService(),
+            new InMemorySettingsStore());
 
         return (viewModel, dbContextFactory, phonemizer);
     }
@@ -234,7 +235,8 @@ public class SearchViewModelTests : IDisposable
             new FakeMediaPlayerLauncher(),
             new FakeClipboardService(),
             new FFmpegClipExtractor(new FFmpegToolLocator()),
-            new FakeFilePickerService());
+            new FakeFilePickerService(),
+            new InMemorySettingsStore());
 
         Assert.False(viewModel.SearchCommand.CanExecute(null));
 

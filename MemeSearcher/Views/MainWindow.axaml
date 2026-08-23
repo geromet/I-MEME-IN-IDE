@@ -16,5 +16,8 @@
         <TabItem Header="Library">
             <views:LibraryView DataContext="{Binding Library}" />
         </TabItem>
+        <TabItem Header="Settings">
+            <views:SettingsView DataContext="{Binding Settings}" />
+        </TabItem>
     </TabControl>
 </Window>

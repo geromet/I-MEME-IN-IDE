@@ -6,8 +6,9 @@ using System.Linq;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using MemeSearcher.Core.Languages;
+using MemeSearcher.Core.Settings;
 using MemeSearcher.Infrastructure.Library;
+using MemeSearcher.Infrastructure.Settings;
 using MemeSearcher.Services;
 
 namespace MemeSearcher.ViewModels;
@@ -15,12 +16,13 @@ namespace MemeSearcher.ViewModels;
 public partial class LibraryViewModel(
     LibraryService libraryService,
     MediaIngestionService ingestionService,
-    IFilePickerService filePicker) : ViewModelBase
+    IFilePickerService filePicker,
+    ISettingsStore settings) : ViewModelBase
 {
-    // Shared with SearchViewModel via the catalog - a search must be phonemized with the same
-    // language the corpus was ingested with, so these two must never disagree (#23). A per-import
-    // selector arrives with #24.
-    private static string Language => LanguageCatalog.Default.Id;
+    // The language new imports are transcribed and phonemized in, chosen in Settings (#24).
+    // Shared with SearchViewModel through the same setting, since a search must be phonemized in
+    // the language its corpus was ingested with (#23).
+    private string Language => settings.Get(WhisperXSettings.Language);
 
     private static readonly HashSet<string> TranscriptExtensions = new(StringComparer.OrdinalIgnoreCase)
     {

@@ -71,7 +71,14 @@ public class MediaIngestionService(
             ContentHash = contentHash,
         };
 
-        var parsed = await ResolveTranscriptAsync(request, cancellationToken);
+        var (parsed, provenance) = await ResolveTranscriptAsync(request, cancellationToken);
+
+        // Provenance is only known when this import actually ran a transcription - an imported SRT
+        // was produced by something outside this app entirely (#24).
+        media.TranscriptionModel = provenance?.Model;
+        media.TranscriptionDevice = provenance?.Device;
+        media.TranscriptionComputeType = provenance?.ComputeType;
+
         var transcript = await BuildTranscriptAsync(media.Id, request.Language, parsed, cancellationToken);
 
         dbContext.Media.Add(media);
@@ -203,13 +210,14 @@ public class MediaIngestionService(
     /// directly (Milestone 3). Both paths converge on the same ParsedTranscript shape so the rest
     /// of the pipeline (phonemization, word-building) doesn't need to know which happened.
     /// </summary>
-    private async Task<ParsedTranscript> ResolveTranscriptAsync(MediaIngestionRequest request, CancellationToken cancellationToken)
+    private async Task<(ParsedTranscript Parsed, TranscriptionProvenance? Provenance)> ResolveTranscriptAsync(
+        MediaIngestionRequest request, CancellationToken cancellationToken)
     {
         if (request.TranscriptPath is not null)
         {
             var parser = parserFactory.GetParser(request.TranscriptPath);
             var content = await File.ReadAllTextAsync(request.TranscriptPath, cancellationToken);
-            return parser.Parse(content);
+            return (parser.Parse(content), null);
         }
 
         var transcribed = await transcriptionProvider.TranscribeAsync(request.MediaPath!, request.Language, cancellationToken);
@@ -220,7 +228,7 @@ public class MediaIngestionService(
                 s.Text,
                 s.Words?.Select(w => new ParsedWord(w.Text, w.StartSeconds, w.EndSeconds)).ToList()))
             .ToList();
-        return new ParsedTranscript(transcriptionProvider.ProviderName, cues);
+        return (new ParsedTranscript(transcriptionProvider.ProviderName, cues), transcribed.Provenance);
     }
 
     private async Task<CoreModels.Transcript> BuildTranscriptAsync(

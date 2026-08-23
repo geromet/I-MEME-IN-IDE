@@ -2,7 +2,9 @@ using System.Diagnostics;
 using System.Text.Json;
 using MemeSearcher.Core.Interfaces;
 using MemeSearcher.Core.Languages;
+using MemeSearcher.Core.Settings;
 using MemeSearcher.Infrastructure.Processes;
+using MemeSearcher.Infrastructure.Settings;
 
 namespace MemeSearcher.Infrastructure.Transcription;
 
@@ -18,7 +20,10 @@ namespace MemeSearcher.Infrastructure.Transcription;
 /// WhisperXAlignmentProvider still exists for the case where the transcript came from somewhere
 /// else entirely (e.g. an imported SRT) and needs aligning against audio on its own.
 /// </summary>
-public class WhisperXTranscriptionProvider(WhisperXToolLocator toolLocator) : ITranscriptionProvider
+public class WhisperXTranscriptionProvider(
+    WhisperXToolLocator toolLocator,
+    ISettingsStore settings,
+    WhisperXSettings whisperXSettings) : ITranscriptionProvider
 {
     public string ProviderName => "whisperx";
 
@@ -37,10 +42,22 @@ public class WhisperXTranscriptionProvider(WhisperXToolLocator toolLocator) : IT
         // documented "detect the language" mode, not a missing value.
         var whisperCode = language is null ? null : LanguageCatalog.Get(language).WhisperCode;
 
+        // Settings, not hardcoded values (#24). Validate the combination before spawning: a bad
+        // device/compute pairing otherwise surfaces as a Python traceback minutes into a run.
+        if (whisperXSettings.Validate(settings) is { } settingsError)
+        {
+            throw new InvalidOperationException($"WhisperX settings are not usable: {settingsError}");
+        }
+
+        var provenance = new TranscriptionProvenance(
+            Model: settings.Get(WhisperXSettings.Model),
+            Device: whisperXSettings.ResolveDevice(settings),
+            ComputeType: settings.Get(WhisperXSettings.ComputeType));
+
         var outputDir = Directory.CreateTempSubdirectory("memesearcher-whisperx-").FullName;
         try
         {
-            await RunWhisperXAsync(status.ExecutablePath!, mediaPath, whisperCode, outputDir, cancellationToken);
+            await RunWhisperXAsync(status.ExecutablePath!, mediaPath, whisperCode, provenance, outputDir, cancellationToken);
 
             var outputJsonPath = Path.Combine(outputDir, Path.GetFileNameWithoutExtension(mediaPath) + ".json");
             if (!File.Exists(outputJsonPath))
@@ -54,7 +71,7 @@ public class WhisperXTranscriptionProvider(WhisperXToolLocator toolLocator) : IT
 
             // Report back the neutral id, not whisperx's code - this value is stored on
             // Transcript.Language and has to be resolvable through LanguageCatalog later.
-            return new TranscriptionResult(language ?? "unknown", segments);
+            return new TranscriptionResult(language ?? "unknown", segments, provenance);
         }
         finally
         {
@@ -136,7 +153,12 @@ public class WhisperXTranscriptionProvider(WhisperXToolLocator toolLocator) : IT
     }
 
     private static async Task RunWhisperXAsync(
-        string executablePath, string mediaPath, string? whisperCode, string outputDir, CancellationToken cancellationToken)
+        string executablePath,
+        string mediaPath,
+        string? whisperCode,
+        TranscriptionProvenance provenance,
+        string outputDir,
+        CancellationToken cancellationToken)
     {
         var startInfo = new ProcessStartInfo(executablePath)
         {
@@ -149,11 +171,14 @@ public class WhisperXTranscriptionProvider(WhisperXToolLocator toolLocator) : IT
         startInfo.ArgumentList.Add("json");
         startInfo.ArgumentList.Add("--output_dir");
         startInfo.ArgumentList.Add(outputDir);
-        // float16 is the whisperx default and fails outright on CPU-only machines; float32 works
-        // everywhere, at a performance cost on GPUs that support float16. Not user-configurable
-        // yet - a reasonable default until there's a settings surface for it.
         startInfo.ArgumentList.Add("--compute_type");
-        startInfo.ArgumentList.Add("float32");
+        startInfo.ArgumentList.Add(provenance.ComputeType);
+        startInfo.ArgumentList.Add("--model");
+        startInfo.ArgumentList.Add(provenance.Model);
+        // Always pass --device explicitly. whisperx's own default is `cuda`, so omitting this - as
+        // this class previously did - silently selects a GPU on machines that have none.
+        startInfo.ArgumentList.Add("--device");
+        startInfo.ArgumentList.Add(provenance.Device);
 
         if (!string.IsNullOrWhiteSpace(whisperCode))
         {
