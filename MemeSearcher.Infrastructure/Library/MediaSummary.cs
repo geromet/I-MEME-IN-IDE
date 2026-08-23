@@ -12,6 +12,7 @@ public record MediaSummary(
     string Title,
     string Path,
     bool HasPlayableMedia,
+    TimeSpan Duration,
     string Language,
     DateTimeOffset CreatedAt,
     int SegmentCount,

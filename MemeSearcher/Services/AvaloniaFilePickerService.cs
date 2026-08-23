@@ -19,7 +19,7 @@ public class AvaloniaFilePickerService : IFilePickerService
 
         var files = await window.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
         {
-            Title = "Add media (select a transcript, and optionally a matching audio/video file)",
+            Title = "Add media (a transcript, an audio/video file, or both)",
             AllowMultiple = true,
             FileTypeFilter =
             [

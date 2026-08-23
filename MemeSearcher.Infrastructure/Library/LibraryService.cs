@@ -48,6 +48,7 @@ public class LibraryService(IDbContextFactory<MemeSearcherDbContext> dbContextFa
                 m.Title ?? Path.GetFileName(m.Path),
                 m.Path,
                 m.MediaFilePath is not null,
+                m.Duration,
                 m.Language,
                 m.CreatedAt,
                 segmentCounts.GetValueOrDefault(m.Id),

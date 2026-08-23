@@ -1,6 +1,6 @@
 namespace MemeSearcher.Infrastructure.Processes;
 
-internal static class ProcessPathResolver
+public static class ProcessPathResolver
 {
     public static string? FindOnPath(string executableName)
     {

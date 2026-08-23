@@ -4,6 +4,7 @@ using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using MemeSearcher.Core.Interfaces;
 using MemeSearcher.Infrastructure.Database;
+using MemeSearcher.Infrastructure.Ffmpeg;
 using MemeSearcher.Infrastructure.Library;
 using MemeSearcher.Infrastructure.Phonetics;
 using MemeSearcher.Infrastructure.Processes;
@@ -58,6 +59,15 @@ public partial class App : Application
 
         services.AddSingleton<IExternalToolLocator, EspeakToolLocator>();
         services.AddSingleton<IPhonemizer, EspeakPhonemizer>();
+
+        // Milestone 3: not registered as IExternalToolLocator, since only one implementation of
+        // that interface can be resolved via DI at a time and espeak already claims it -
+        // WhisperXTranscriptionProvider/MediaMetadataProbe depend on their concrete locator types
+        // directly instead.
+        services.AddSingleton<WhisperXToolLocator>();
+        services.AddSingleton<ITranscriptionProvider, WhisperXTranscriptionProvider>();
+        services.AddSingleton<FFprobeToolLocator>();
+        services.AddSingleton<MediaMetadataProbe>();
 
         services.AddScoped<IPhoneticSearchService, PhoneticSearchService>();
         services.AddScoped<LibraryService>();

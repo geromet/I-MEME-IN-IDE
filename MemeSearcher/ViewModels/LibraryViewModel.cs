@@ -74,16 +74,22 @@ public partial class LibraryViewModel(
             return;
         }
 
+        var displayName = Path.GetFileName(transcriptPath ?? mediaPath!);
+
         IsBusy = true;
-        StatusMessage = $"Importing {Path.GetFileName(transcriptPath)}...";
+        // Milestone 3: no transcript file means whisperx has to run first, which is much slower
+        // than parsing an SRT - say so rather than leaving the user staring at a generic message.
+        StatusMessage = transcriptPath is null
+            ? $"Transcribing {displayName} (this can take a while)..."
+            : $"Importing {displayName}...";
 
         try
         {
             var result = await ingestionService.ImportAsync(new MediaIngestionRequest(mediaPath, transcriptPath, Language));
 
             StatusMessage = result.Outcome == MediaIngestionOutcome.Imported
-                ? $"Imported {Path.GetFileName(transcriptPath)}."
-                : $"{Path.GetFileName(transcriptPath)} was already indexed.";
+                ? $"Imported {displayName}."
+                : $"{displayName} was already indexed.";
         }
         catch (Exception ex)
         {
@@ -101,23 +107,20 @@ public partial class LibraryViewModel(
     /// <summary>
     /// Sorts picked files into "the transcript" and "the optional companion media file" by
     /// extension (addendum §7: transcript and media filenames don't have to match, so this can't
-    /// be done by name).
+    /// be done by name). A media file with no transcript is valid as of Milestone 3 - it gets
+    /// transcribed directly instead of parsed from a file.
     /// </summary>
     private static bool TryClassify(
-        IReadOnlyList<string> files, out string transcriptPath, out string? mediaPath, out string error)
+        IReadOnlyList<string> files, out string? transcriptPath, out string? mediaPath, out string error)
     {
         var transcripts = files.Where(f => TranscriptExtensions.Contains(Path.GetExtension(f))).ToList();
         var mediaFiles = files.Where(f => !TranscriptExtensions.Contains(Path.GetExtension(f))).ToList();
 
-        transcriptPath = "";
+        transcriptPath = null;
         mediaPath = null;
 
-        if (transcripts.Count == 0)
-        {
-            error = "Select at least one transcript file (.srt, .vtt, or .txt).";
-            return false;
-        }
-
+        // No "both empty" check here: the caller already returns early when no files were picked,
+        // and every picked file falls into exactly one of the two buckets above.
         if (transcripts.Count > 1)
         {
             error = "Select only one transcript file at a time.";
@@ -126,11 +129,11 @@ public partial class LibraryViewModel(
 
         if (mediaFiles.Count > 1)
         {
-            error = "Select only one companion audio/video file at a time.";
+            error = "Select only one audio/video file at a time.";
             return false;
         }
 
-        transcriptPath = transcripts[0];
+        transcriptPath = transcripts.Count == 1 ? transcripts[0] : null;
         mediaPath = mediaFiles.Count == 1 ? mediaFiles[0] : null;
         error = "";
         return true;

@@ -1,8 +1,10 @@
 using MemeSearcher.Infrastructure.Database;
+using MemeSearcher.Infrastructure.Ffmpeg;
 using MemeSearcher.Infrastructure.Library;
 using MemeSearcher.Infrastructure.Phonetics;
 using MemeSearcher.Infrastructure.Processes;
 using MemeSearcher.Infrastructure.Transcription;
+using MemeSearcher.Tests.TestDoubles;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -42,7 +44,7 @@ public class LibraryServiceTests : IDisposable
         await File.WriteAllTextAsync(path, srtBody);
 
         var phonemizer = new EspeakPhonemizer(new EspeakToolLocator());
-        var ingestion = new MediaIngestionService(await factory.CreateDbContextAsync(), TranscriptParserFactory.CreateDefault(), phonemizer);
+        var ingestion = new MediaIngestionService(await factory.CreateDbContextAsync(), TranscriptParserFactory.CreateDefault(), phonemizer, new UnusedTranscriptionProvider(), new MediaMetadataProbe(new FFprobeToolLocator()));
         var result = await ingestion.ImportAsync(new MediaIngestionRequest(mediaPath, path, "en-US"));
         return result.Media.Id;
     }

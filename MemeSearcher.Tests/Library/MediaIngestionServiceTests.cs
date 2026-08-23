@@ -1,9 +1,11 @@
 using MemeSearcher.Core.Interfaces;
 using MemeSearcher.Infrastructure.Database;
+using MemeSearcher.Infrastructure.Ffmpeg;
 using MemeSearcher.Infrastructure.Library;
 using MemeSearcher.Infrastructure.Phonetics;
 using MemeSearcher.Infrastructure.Processes;
 using MemeSearcher.Infrastructure.Transcription;
+using MemeSearcher.Tests.TestDoubles;
 using Microsoft.EntityFrameworkCore;
 
 namespace MemeSearcher.Tests.Library;
@@ -59,7 +61,7 @@ public class MediaIngestionServiceTests : IDisposable
         }
 
         await using var context = CreateContext();
-        var service = new MediaIngestionService(context, TranscriptParserFactory.CreateDefault(), phonemizer);
+        var service = new MediaIngestionService(context, TranscriptParserFactory.CreateDefault(), phonemizer, new UnusedTranscriptionProvider(), new MediaMetadataProbe(new FFprobeToolLocator()));
 
         var result = await service.ImportAsync(new MediaIngestionRequest(null, srtPath, "en-US"));
 
@@ -106,7 +108,7 @@ public class MediaIngestionServiceTests : IDisposable
         }
 
         await using var context = CreateContext();
-        var service = new MediaIngestionService(context, TranscriptParserFactory.CreateDefault(), phonemizer);
+        var service = new MediaIngestionService(context, TranscriptParserFactory.CreateDefault(), phonemizer, new UnusedTranscriptionProvider(), new MediaMetadataProbe(new FFprobeToolLocator()));
 
         var first = await service.ImportAsync(new MediaIngestionRequest(null, srtPath, "en-US"));
         var second = await service.ImportAsync(new MediaIngestionRequest(null, srtPath, "en-US"));
@@ -117,6 +119,68 @@ public class MediaIngestionServiceTests : IDisposable
 
         Assert.Equal(1, await context.Media.CountAsync());
         Assert.Equal(1, await context.Transcripts.CountAsync());
+    }
+
+    [Fact]
+    public async Task ImportAsync_MediaWithNoTranscriptFile_TranscribesAndBuildsSegmentsWords()
+    {
+        var mediaPath = Path.Combine(_tempDir, "clip.mp4");
+        await File.WriteAllTextAsync(mediaPath, "not a real video, just needs to exist");
+
+        var phonemizer = await CreatePhonemizerIfAvailableAsync();
+        if (phonemizer is null)
+        {
+            return;
+        }
+
+        // whisperx isn't installed here, so a fake ITranscriptionProvider stands in - this test's
+        // job is to prove the ingestion pipeline correctly converts a TranscriptionResult into
+        // the same Segment/Word/phoneme data an SRT import produces, not to test whisperx itself
+        // (see WhisperXTranscriptionProviderTests for that boundary).
+        var fakeTranscription = new FakeTranscriptionProvider([
+            new(0.5, 2.0, "a long bus"),
+        ]);
+
+        await using var context = CreateContext();
+        var service = new MediaIngestionService(
+            context, TranscriptParserFactory.CreateDefault(), phonemizer, fakeTranscription, new MediaMetadataProbe(new FFprobeToolLocator()));
+
+        var result = await service.ImportAsync(new MediaIngestionRequest(mediaPath, null, "en-US"));
+
+        Assert.Equal(MediaIngestionOutcome.Imported, result.Outcome);
+        Assert.Equal(mediaPath, fakeTranscription.LastMediaPath);
+        Assert.Equal("en-US", fakeTranscription.LastLanguage);
+
+        var storedTranscript = await context.Transcripts
+            .Include(t => t.Segments)
+            .ThenInclude(s => s.Words)
+            .SingleAsync(t => t.MediaId == result.Media.Id);
+
+        Assert.Equal("fake-transcriber", storedTranscript.Source);
+
+        var segment = Assert.Single(storedTranscript.Segments);
+        Assert.Equal("a long bus", segment.Text);
+        Assert.Equal(0.5, segment.StartSeconds);
+        Assert.Equal(2.0, segment.EndSeconds);
+        Assert.Equal(3, segment.Words.Count);
+        Assert.False(string.IsNullOrWhiteSpace(segment.PhonemeSequence));
+    }
+
+    [Fact]
+    public async Task ImportAsync_NeitherMediaPathNorTranscriptPathThrows()
+    {
+        var phonemizer = await CreatePhonemizerIfAvailableAsync();
+        if (phonemizer is null)
+        {
+            return;
+        }
+
+        await using var context = CreateContext();
+        var service = new MediaIngestionService(
+            context, TranscriptParserFactory.CreateDefault(), phonemizer, new UnusedTranscriptionProvider(), new MediaMetadataProbe(new FFprobeToolLocator()));
+
+        await Assert.ThrowsAsync<ArgumentException>(
+            () => service.ImportAsync(new MediaIngestionRequest(null, null, "en-US")));
     }
 
     public void Dispose()

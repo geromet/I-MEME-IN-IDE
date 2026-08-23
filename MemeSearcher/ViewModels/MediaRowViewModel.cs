@@ -17,6 +17,11 @@ public partial class MediaRowViewModel(MediaSummary summary) : ObservableObject
     // shown here so it's not a surprise when Play is unavailable on a search result later.
     public string PlayableMediaDisplay { get; } = summary.HasPlayableMedia ? "🎬 playable" : "transcript only";
 
+    // Milestone 3: duration is now actually populated (via ffprobe) instead of always zero.
+    public string DurationDisplay { get; } = summary.Duration > TimeSpan.Zero
+        ? summary.Duration.ToString(@"hh\:mm\:ss")
+        : "";
+
     public string PhonemeCoverageDisplay { get; } = summary.WordCount > 0
         ? $"{summary.PhonemizedWordCount}/{summary.WordCount} phonemized"
         : "no words";

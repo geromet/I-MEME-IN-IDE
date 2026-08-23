@@ -1,4 +1,5 @@
 using MemeSearcher.Infrastructure.Database;
+using MemeSearcher.Infrastructure.Ffmpeg;
 using MemeSearcher.Infrastructure.Library;
 using MemeSearcher.Infrastructure.Phonetics;
 using MemeSearcher.Infrastructure.Processes;
@@ -66,7 +67,7 @@ public class SearchViewModelTests : IDisposable
 
             """);
 
-        var ingestion = new MediaIngestionService(await dbContextFactory.CreateDbContextAsync(), TranscriptParserFactory.CreateDefault(), phonemizer);
+        var ingestion = new MediaIngestionService(await dbContextFactory.CreateDbContextAsync(), TranscriptParserFactory.CreateDefault(), phonemizer, new UnusedTranscriptionProvider(), new MediaMetadataProbe(new FFprobeToolLocator()));
         await ingestion.ImportAsync(new MediaIngestionRequest(null, srtPath, "en-US"));
 
         viewModel.QueryText = "among us";
@@ -105,7 +106,7 @@ public class SearchViewModelTests : IDisposable
         var mediaPath = Path.Combine(_tempDir, "clip.mp4");
         await File.WriteAllTextAsync(mediaPath, "not a real video, just needs to exist");
 
-        var ingestion = new MediaIngestionService(await dbContextFactory.CreateDbContextAsync(), TranscriptParserFactory.CreateDefault(), phonemizer);
+        var ingestion = new MediaIngestionService(await dbContextFactory.CreateDbContextAsync(), TranscriptParserFactory.CreateDefault(), phonemizer, new UnusedTranscriptionProvider(), new MediaMetadataProbe(new FFprobeToolLocator()));
         await ingestion.ImportAsync(new MediaIngestionRequest(mediaPath, srtPath, "en-US"));
 
         viewModel.QueryText = "among us";

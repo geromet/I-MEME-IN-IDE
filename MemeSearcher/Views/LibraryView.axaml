@@ -29,6 +29,7 @@
                                     <TextBlock Text="{Binding SegmentsDisplay}" Opacity="0.7" />
                                     <TextBlock Text="{Binding PhonemeCoverageDisplay}" Opacity="0.7" />
                                     <TextBlock Text="{Binding PlayableMediaDisplay}" Opacity="0.7" />
+                                    <TextBlock Text="{Binding DurationDisplay}" Opacity="0.7" />
                                     <TextBlock Text="{Binding ImportedAtDisplay}" Opacity="0.7" />
                                 </StackPanel>
                             </StackPanel>

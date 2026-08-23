@@ -1,6 +1,7 @@
 using MemeSearcher.Core.Interfaces;
 using MemeSearcher.Core.Transcripts;
 using MemeSearcher.Infrastructure.Database;
+using MemeSearcher.Infrastructure.Ffmpeg;
 using MemeSearcher.Infrastructure.Transcription;
 using Microsoft.EntityFrameworkCore;
 using CoreModels = MemeSearcher.Core.Models;
@@ -8,20 +9,30 @@ using CoreModels = MemeSearcher.Core.Models;
 namespace MemeSearcher.Infrastructure.Library;
 
 /// <summary>
-/// Orchestrates the "Source file(s) -> identify media -> import transcript -> phonemize -> build
-/// phoneme stream" pipeline (addendum §6). Indexing (candidate generation for search) is a
-/// separate, independently rerunnable stage - see addendum §5, §28 - and is not done here.
+/// Orchestrates the "Source file(s) -> identify media -> transcribe (if needed) -> phonemize ->
+/// build phoneme stream" pipeline (addendum §6). As of Milestone 3, "import transcript" can mean
+/// either parsing an existing SRT/VTT/text file or transcribing the media directly via
+/// ITranscriptionProvider when no transcript file was given. Indexing (candidate generation for
+/// search) is a separate, independently rerunnable stage - see addendum §5, §28 - and is not done
+/// here.
 /// </summary>
 public class MediaIngestionService(
     MemeSearcherDbContext dbContext,
     TranscriptParserFactory parserFactory,
-    IPhonemizer phonemizer)
+    IPhonemizer phonemizer,
+    ITranscriptionProvider transcriptionProvider,
+    MediaMetadataProbe metadataProbe)
 {
     public async Task<MediaIngestionResult> ImportAsync(
         MediaIngestionRequest request,
         CancellationToken cancellationToken = default)
     {
-        var identityPath = request.MediaPath ?? request.TranscriptPath;
+        if (request.MediaPath is null && request.TranscriptPath is null)
+        {
+            throw new ArgumentException("At least one of MediaPath or TranscriptPath must be provided.", nameof(request));
+        }
+
+        var identityPath = request.MediaPath ?? request.TranscriptPath!;
         var contentHash = await ContentHasher.ComputeSha256Async(identityPath, cancellationToken);
 
         var existing = await dbContext.Media
@@ -36,13 +47,21 @@ public class MediaIngestionService(
         var fileInfo = new FileInfo(identityPath);
         var now = DateTimeOffset.UtcNow;
 
+        // Duration is only knowable when there's an actual media file - FFmpeg/ffprobe is
+        // optional (addendum Milestone 3), so a missing ffprobe just leaves this at zero rather
+        // than failing the import.
+        var duration = request.MediaPath is not null
+            ? await metadataProbe.TryGetDurationAsync(request.MediaPath, cancellationToken)
+            : null;
+
         var media = new CoreModels.Media
         {
             Id = Guid.NewGuid(),
-            Path = request.MediaPath ?? request.TranscriptPath,
+            Path = identityPath,
             MediaFilePath = request.MediaPath,
             Title = request.Title,
             Language = request.Language,
+            Duration = duration ?? TimeSpan.Zero,
             CreatedAt = now,
             UpdatedAt = now,
             ProcessingVersion = 1,
@@ -51,10 +70,7 @@ public class MediaIngestionService(
             ContentHash = contentHash,
         };
 
-        var parser = parserFactory.GetParser(request.TranscriptPath);
-        var content = await File.ReadAllTextAsync(request.TranscriptPath, cancellationToken);
-        var parsed = parser.Parse(content);
-
+        var parsed = await ResolveTranscriptAsync(request, cancellationToken);
         var transcript = await BuildTranscriptAsync(media.Id, request.Language, parsed, cancellationToken);
 
         dbContext.Media.Add(media);
@@ -63,6 +79,25 @@ public class MediaIngestionService(
         await dbContext.SaveChangesAsync(cancellationToken);
 
         return new MediaIngestionResult(MediaIngestionOutcome.Imported, media);
+    }
+
+    /// <summary>
+    /// Parses an existing transcript file if one was given; otherwise transcribes the media
+    /// directly (Milestone 3). Both paths converge on the same ParsedTranscript shape so the rest
+    /// of the pipeline (phonemization, word-building) doesn't need to know which happened.
+    /// </summary>
+    private async Task<ParsedTranscript> ResolveTranscriptAsync(MediaIngestionRequest request, CancellationToken cancellationToken)
+    {
+        if (request.TranscriptPath is not null)
+        {
+            var parser = parserFactory.GetParser(request.TranscriptPath);
+            var content = await File.ReadAllTextAsync(request.TranscriptPath, cancellationToken);
+            return parser.Parse(content);
+        }
+
+        var transcribed = await transcriptionProvider.TranscribeAsync(request.MediaPath!, request.Language, cancellationToken);
+        var cues = transcribed.Segments.Select(s => new ParsedCue(s.StartSeconds, s.EndSeconds, s.Text)).ToList();
+        return new ParsedTranscript(transcriptionProvider.ProviderName, cues);
     }
 
     private async Task<CoreModels.Transcript> BuildTranscriptAsync(

@@ -1,8 +1,10 @@
 using MemeSearcher.Infrastructure.Database;
+using MemeSearcher.Infrastructure.Ffmpeg;
 using MemeSearcher.Infrastructure.Library;
 using MemeSearcher.Infrastructure.Phonetics;
 using MemeSearcher.Infrastructure.Processes;
 using MemeSearcher.Infrastructure.Transcription;
+using MemeSearcher.Tests.TestDoubles;
 using MemeSearcher.Services;
 using MemeSearcher.ViewModels;
 using Microsoft.EntityFrameworkCore;
@@ -44,7 +46,7 @@ public class LibraryViewModelTests : IDisposable
         }
 
         var phonemizer = new EspeakPhonemizer(locator);
-        var ingestion = new MediaIngestionService(await dbContextFactory.CreateDbContextAsync(), TranscriptParserFactory.CreateDefault(), phonemizer);
+        var ingestion = new MediaIngestionService(await dbContextFactory.CreateDbContextAsync(), TranscriptParserFactory.CreateDefault(), phonemizer, new UnusedTranscriptionProvider(), new MediaMetadataProbe(new FFprobeToolLocator()));
         var libraryService = new LibraryService(dbContextFactory);
 
         return new LibraryViewModel(libraryService, ingestion, new StubFilePickerService(pickedFilePaths));
@@ -105,8 +107,13 @@ public class LibraryViewModelTests : IDisposable
     }
 
     [Fact]
-    public async Task ImportAsync_NoTranscriptSelectedReportsAnError()
+    public async Task ImportAsync_MediaFileWithNoTranscript_AttemptsTranscriptionInsteadOfErroring()
     {
+        // Milestone 3: a bare media file is a valid selection now - it should reach
+        // ITranscriptionProvider rather than being rejected by file-selection validation.
+        // TrySetUpAsync wires UnusedTranscriptionProvider, which throws a distinctive message,
+        // so seeing that message (not a "select a transcript" validation error) proves the
+        // classification logic let it through.
         var mediaPath = Path.Combine(_tempDir, "clip.mp4");
         await File.WriteAllTextAsync(mediaPath, "not a real video");
 
@@ -119,7 +126,27 @@ public class LibraryViewModelTests : IDisposable
         await viewModel.ImportCommand.ExecuteAsync(null);
 
         Assert.Empty(viewModel.Items);
-        Assert.Contains("Select at least one transcript file", viewModel.StatusMessage);
+        Assert.Contains("should not need transcription", viewModel.StatusMessage);
+    }
+
+    [Fact]
+    public async Task ImportAsync_TwoMediaFilesReportsAnError()
+    {
+        var mediaPathA = Path.Combine(_tempDir, "a.mp4");
+        var mediaPathB = Path.Combine(_tempDir, "b.mp4");
+        await File.WriteAllTextAsync(mediaPathA, "not a real video");
+        await File.WriteAllTextAsync(mediaPathB, "not a real video");
+
+        var viewModel = await TrySetUpAsync(mediaPathA, mediaPathB);
+        if (viewModel is null)
+        {
+            return;
+        }
+
+        await viewModel.ImportCommand.ExecuteAsync(null);
+
+        Assert.Empty(viewModel.Items);
+        Assert.Contains("Select only one audio/video file", viewModel.StatusMessage);
     }
 
     [Fact]

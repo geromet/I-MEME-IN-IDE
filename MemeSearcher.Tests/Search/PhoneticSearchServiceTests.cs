@@ -1,10 +1,12 @@
 using MemeSearcher.Core.Interfaces;
 using MemeSearcher.Core.Search;
 using MemeSearcher.Infrastructure.Database;
+using MemeSearcher.Infrastructure.Ffmpeg;
 using MemeSearcher.Infrastructure.Library;
 using MemeSearcher.Infrastructure.Phonetics;
 using MemeSearcher.Infrastructure.Processes;
 using MemeSearcher.Infrastructure.Transcription;
+using MemeSearcher.Tests.TestDoubles;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -49,7 +51,7 @@ public class PhoneticSearchServiceTests : IDisposable
         await File.WriteAllTextAsync(path, srtBody);
 
         await using var context = await services.GetRequiredService<IDbContextFactory<MemeSearcherDbContext>>().CreateDbContextAsync();
-        var ingestion = new MediaIngestionService(context, TranscriptParserFactory.CreateDefault(), phonemizer);
+        var ingestion = new MediaIngestionService(context, TranscriptParserFactory.CreateDefault(), phonemizer, new UnusedTranscriptionProvider(), new MediaMetadataProbe(new FFprobeToolLocator()));
         await ingestion.ImportAsync(new MediaIngestionRequest(null, path, "en-US"));
     }
 
