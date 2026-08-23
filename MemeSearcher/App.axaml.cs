@@ -121,6 +121,10 @@ public partial class App : Application
         services.AddSingleton<IMediaPlayerLauncher, ExternalMediaPlayerLauncher>();
 
         services.AddTransient<SearchViewModel>();
+        // Milestone 12: MainWindowViewModel needs to mint a new SearchViewModel per opened tab -
+        // a delegate keeps it from depending on IServiceProvider directly (which would make it a
+        // service locator and hard to unit-test without a full container).
+        services.AddSingleton<Func<SearchViewModel>>(sp => sp.GetRequiredService<SearchViewModel>);
         services.AddTransient<LibraryViewModel>();
         services.AddTransient<SettingsViewModel>();
         services.AddTransient<MainWindowViewModel>();

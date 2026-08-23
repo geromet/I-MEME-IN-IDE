@@ -4,20 +4,85 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:vm="using:MemeSearcher.ViewModels"
         xmlns:views="using:MemeSearcher.Views"
-        mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="600"
+        mc:Ignorable="d" d:DesignWidth="1280" d:DesignHeight="800"
         x:Class="MemeSearcher.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
+        x:Name="Root"
         Title="Phonetic Search"
-        Width="800" Height="600">
-    <TabControl>
-        <TabItem Header="Search">
-            <views:SearchView DataContext="{Binding Search}" />
-        </TabItem>
-        <TabItem Header="Library">
-            <views:LibraryView DataContext="{Binding Library}" />
-        </TabItem>
-        <TabItem Header="Settings">
-            <views:SettingsView DataContext="{Binding Settings}" />
-        </TabItem>
-    </TabControl>
+        Width="1280" Height="800"
+        MinWidth="960" MinHeight="600">
+    <Grid RowDefinitions="Auto,*,Auto">
+
+        <!-- ══ TOOLBAR ══ -->
+        <DockPanel Grid.Row="0" Classes="Toolbar" LastChildFill="False">
+            <Button DockPanel.Dock="Left" Classes="Toolbar" Content="Add Media..." Command="{Binding Library.ImportCommand}" />
+            <Button DockPanel.Dock="Left" Classes="Toolbar" Content="Reindex" Command="{Binding Library.ReindexCommand}" />
+            <Button DockPanel.Dock="Left" Classes="Toolbar" Content="+ New Search" Command="{Binding NewSearchTabCommand}" />
+            <Button DockPanel.Dock="Left" Classes="Toolbar" Content="Jobs / Errors" Command="{Binding ToggleBottomPanelCommand}" />
+            <Button DockPanel.Dock="Right" Classes="Toolbar" Content="Settings..." Click="OnSettingsClick" />
+        </DockPanel>
+
+        <!-- ══ BODY: Library | documents (+ collapsible bottom panel) | Inspector ══ -->
+        <Grid Grid.Row="1" ColumnDefinitions="240,4,*,4,260">
+
+            <!-- LIBRARY (persistent left panel, not a tab) -->
+            <Border Grid.Column="0" Classes="Panel" BorderThickness="0,0,1,0">
+                <views:LibraryView DataContext="{Binding Library}" />
+            </Border>
+
+            <GridSplitter Grid.Column="1" Width="4" ResizeDirection="Columns" />
+
+            <!-- DOCUMENT AREA: one tab per executed search, plus a collapsible bottom panel -->
+            <Grid Grid.Column="2" RowDefinitions="*,Auto,Auto">
+                <TabControl Grid.Row="0"
+                            ItemsSource="{Binding SearchTabs}"
+                            SelectedItem="{Binding ActiveSearchTab}">
+                    <TabControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:SearchViewModel">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="{Binding QueryText, TargetNullValue='New Search', FallbackValue='New Search'}" VerticalAlignment="Center" />
+                                <Button Classes="TabClose"
+                                        Command="{Binding #Root.((vm:MainWindowViewModel)DataContext).CloseSearchTabCommand}"
+                                        CommandParameter="{Binding}" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </TabControl.ItemTemplate>
+                    <TabControl.ContentTemplate>
+                        <DataTemplate x:DataType="vm:SearchViewModel">
+                            <views:SearchView DataContext="{Binding}" />
+                        </DataTemplate>
+                    </TabControl.ContentTemplate>
+                </TabControl>
+
+                <GridSplitter Grid.Row="1" Height="4" ResizeDirection="Rows" IsVisible="{Binding IsBottomPanelVisible}" />
+
+                <!-- JOBS / ERRORS - shell only, Milestone 14 fills this in. -->
+                <Border Grid.Row="2" Classes="Panel" BorderThickness="0,1,0,0" Height="180"
+                        IsVisible="{Binding IsBottomPanelVisible}">
+                    <DockPanel Margin="10">
+                        <TextBlock DockPanel.Dock="Top" Classes="PanelHeader" Text="JOBS / ERRORS" Margin="0,0,0,8" />
+                        <TextBlock Classes="FieldLabel" Text="No background jobs yet. (Milestone 14)" />
+                    </DockPanel>
+                </Border>
+            </Grid>
+
+            <GridSplitter Grid.Column="3" Width="4" ResizeDirection="Columns" />
+
+            <!-- INSPECTOR - shell only, Milestone 15 fills this in. -->
+            <Border Grid.Column="4" Classes="Panel" BorderThickness="1,0,0,0">
+                <DockPanel Margin="10">
+                    <TextBlock DockPanel.Dock="Top" Classes="PanelHeader" Text="INSPECTOR" Margin="0,0,0,8" />
+                    <TextBlock Classes="FieldLabel" Text="Select a result to inspect it. (Milestone 15)" TextWrapping="Wrap" />
+                </DockPanel>
+            </Border>
+        </Grid>
+
+        <!-- ══ STATUS BAR ══ -->
+        <DockPanel Grid.Row="2" Classes="StatusBar">
+            <TextBlock Classes="FieldLabel" Margin="10,0" VerticalAlignment="Center"
+                       Text="{Binding Library.Items.Count, StringFormat='{}{0} media in library'}" />
+            <TextBlock Classes="FieldLabel" Margin="0,0,10,0" VerticalAlignment="Center"
+                       HorizontalAlignment="Right" Text="Index: use Reindex on the toolbar to rebuild" />
+        </DockPanel>
+    </Grid>
 </Window>

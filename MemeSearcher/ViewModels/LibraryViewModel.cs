@@ -6,6 +6,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using MemeSearcher.Core.Interfaces;
 using MemeSearcher.Core.Settings;
 using MemeSearcher.Infrastructure.Library;
 using MemeSearcher.Infrastructure.Settings;
@@ -17,7 +18,8 @@ public partial class LibraryViewModel(
     LibraryService libraryService,
     MediaIngestionService ingestionService,
     IFilePickerService filePicker,
-    ISettingsStore settings) : ViewModelBase
+    ISettingsStore settings,
+    IPhoneNGramIndexService indexService) : ViewModelBase
 {
     // The language new imports are transcribed and phonemized in, chosen in Settings (#24).
     // Shared with SearchViewModel through the same setting, since a search must be phonemized in
@@ -193,6 +195,32 @@ public partial class LibraryViewModel(
 
     [RelayCommand]
     private void CancelDelete(MediaRowViewModel row) => row.IsPendingDelete = false;
+
+    /// <summary>
+    /// Milestone 12: the shell's toolbar exposes the #9 index as something the user can trigger,
+    /// not just something that runs silently during import. A full rebuild, not incremental - the
+    /// same operation ReindexAllAsync already performs when repairing an index, just reachable now.
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(CanImport))]
+    private async Task ReindexAsync()
+    {
+        IsBusy = true;
+        StatusMessage = "Rebuilding phonetic index...";
+
+        try
+        {
+            var summary = await indexService.ReindexAllAsync();
+            StatusMessage = $"Rebuilt index: {summary.PostingCount} posting(s) across {summary.MediaCount} media item(s).";
+        }
+        catch (Exception ex)
+        {
+            SetError($"Reindex failed: {ex.Message}");
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
 
     /// <summary>
     /// Addendum §30: reprocess a media item's word/phone timing via the configured

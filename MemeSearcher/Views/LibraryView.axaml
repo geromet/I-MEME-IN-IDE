@@ -7,19 +7,20 @@
              x:Class="MemeSearcher.Views.LibraryView"
              x:DataType="vm:LibraryViewModel"
              x:Name="Root">
-    <Grid Margin="16" RowDefinitions="Auto,Auto,*">
-        <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
-            <TextBlock Grid.Column="0" Text="Library" FontSize="20" FontWeight="Bold" VerticalAlignment="Center" />
-            <Button Grid.Column="1" Content="Refresh" Command="{Binding LoadCommand}" />
-            <Button Grid.Column="2" Content="Add Media..." Command="{Binding ImportCommand}" />
-        </Grid>
+    <Grid Margin="12" RowDefinitions="Auto,Auto,Auto,*">
+        <TextBlock Grid.Row="0" Classes="PanelHeader" Text="LIBRARY" Margin="0,0,0,8" />
+
+        <WrapPanel Grid.Row="1" Margin="0,0,0,8">
+            <Button Content="Refresh" Command="{Binding LoadCommand}" Margin="0,0,6,6" />
+            <Button Content="Add Media..." Command="{Binding ImportCommand}" Margin="0,0,6,6" />
+        </WrapPanel>
 
         <!-- Failures get a bordered, wrapping, selectable block; routine status stays a quiet line.
              External tools produce long, specific messages ("acoustic model 'x' is not installed
              (mfa model download acoustic x)") and those are only useful if they can be read in
              full and copied. -->
-        <Border Grid.Row="1"
-                Margin="0,8,0,12"
+        <Border Grid.Row="2"
+                Margin="0,0,0,12"
                 Padding="10"
                 CornerRadius="4"
                 Background="{StaticResource StatusErrorMuted}"
@@ -27,57 +28,60 @@
             <SelectableTextBlock Text="{Binding StatusMessage}" TextWrapping="Wrap" Foreground="{StaticResource TextPrimary}" />
         </Border>
 
-        <TextBlock Grid.Row="1"
+        <TextBlock Grid.Row="2"
                    Classes="FieldLabel"
-                   Margin="0,8,0,12"
+                   Margin="0,0,0,12"
                    Text="{Binding StatusMessage}"
                    TextWrapping="Wrap"
                    IsVisible="{Binding !IsStatusError}" />
 
-        <ListBox Grid.Row="2" ItemsSource="{Binding Items}">
+        <ListBox Grid.Row="3" ItemsSource="{Binding Items}">
             <ListBox.ItemTemplate>
                 <DataTemplate x:DataType="vm:MediaRowViewModel">
                     <Border Padding="10" Margin="0,3" BorderThickness="1" BorderBrush="{StaticResource BorderMid}" CornerRadius="4">
-                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
-                            <StackPanel Grid.Column="0" Spacing="2">
-                                <TextBlock Text="{Binding Title}" FontSize="15" FontWeight="Bold" Foreground="{StaticResource TextPrimary}" />
-                                <TextBlock Classes="FieldLabel" Text="{Binding Path}" FontFamily="monospace" TextTrimming="CharacterEllipsis" />
-                                <StackPanel Orientation="Horizontal" Spacing="12">
-                                    <TextBlock Classes="HeaderLabel" Text="{Binding Language}" />
-                                    <TextBlock Classes="HeaderLabel" Text="{Binding SegmentsDisplay}" />
-                                    <TextBlock Classes="HeaderLabel" Text="{Binding PhonemeCoverageDisplay}" />
-                                    <TextBlock Classes="HeaderLabel" Text="{Binding PlayableMediaDisplay}" />
-                                    <TextBlock Classes="HeaderLabel" Text="{Binding DurationDisplay}" />
-                                    <TextBlock Classes="HeaderLabel" Text="{Binding ImportedAtDisplay}" />
-                                </StackPanel>
-                            </StackPanel>
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="{Binding Title}" FontSize="14" FontWeight="Bold" Foreground="{StaticResource TextPrimary}" TextWrapping="Wrap" />
+                            <TextBlock Classes="FieldLabel" Text="{Binding Path}" FontFamily="monospace" TextTrimming="CharacterEllipsis" />
+                            <WrapPanel>
+                                <TextBlock Classes="HeaderLabel" Margin="0,0,8,2" Text="{Binding Language}" />
+                                <TextBlock Classes="HeaderLabel" Margin="0,0,8,2" Text="{Binding SegmentsDisplay}" />
+                                <TextBlock Classes="HeaderLabel" Margin="0,0,8,2" Text="{Binding PhonemeCoverageDisplay}" />
+                                <TextBlock Classes="HeaderLabel" Margin="0,0,8,2" Text="{Binding PlayableMediaDisplay}" />
+                                <TextBlock Classes="HeaderLabel" Margin="0,0,8,2" Text="{Binding DurationDisplay}" />
+                                <TextBlock Classes="HeaderLabel" Margin="0,0,8,2" Text="{Binding ImportedAtDisplay}" />
+                            </WrapPanel>
 
-                            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                            <WrapPanel Margin="0,4,0,0">
                                 <Button Content="Realign (MFA)"
+                                        Margin="0,0,6,6"
                                         Command="{Binding #Root.((vm:LibraryViewModel)DataContext).RealignCommand}"
                                         CommandParameter="{Binding}"
                                         IsVisible="{Binding HasPlayableMedia}"
                                         IsEnabled="{Binding !IsRealigning}"
                                         ToolTip.Tip="Re-run word/phone alignment against the already-imported transcript, without retranscribing." />
                                 <Button Content="Remove from Library"
+                                        Margin="0,0,6,6"
                                         Command="{Binding #Root.((vm:LibraryViewModel)DataContext).RemoveFromLibraryCommand}"
                                         CommandParameter="{Binding}"
                                         IsVisible="{Binding !IsPendingDelete}" />
                                 <Button Content="Delete Source File..."
+                                        Margin="0,0,6,6"
                                         Command="{Binding #Root.((vm:LibraryViewModel)DataContext).DeleteSourceFileCommand}"
                                         CommandParameter="{Binding}"
                                         IsVisible="{Binding !IsPendingDelete}" />
                                 <Button Classes="Danger"
                                         Content="Confirm Delete?"
+                                        Margin="0,0,6,6"
                                         Command="{Binding #Root.((vm:LibraryViewModel)DataContext).DeleteSourceFileCommand}"
                                         CommandParameter="{Binding}"
                                         IsVisible="{Binding IsPendingDelete}" />
                                 <Button Content="Cancel"
+                                        Margin="0,0,6,6"
                                         Command="{Binding #Root.((vm:LibraryViewModel)DataContext).CancelDeleteCommand}"
                                         CommandParameter="{Binding}"
                                         IsVisible="{Binding IsPendingDelete}" />
-                            </StackPanel>
-                        </Grid>
+                            </WrapPanel>
+                        </StackPanel>
                     </Border>
                 </DataTemplate>
             </ListBox.ItemTemplate>

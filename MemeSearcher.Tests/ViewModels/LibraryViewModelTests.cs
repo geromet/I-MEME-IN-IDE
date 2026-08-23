@@ -52,7 +52,8 @@ public class LibraryViewModelTests : IDisposable
         var libraryService = new LibraryService(dbContextFactory);
 
         return new LibraryViewModel(
-            libraryService, ingestion, new StubFilePickerService(pickedFilePaths), new InMemorySettingsStore());
+            libraryService, ingestion, new StubFilePickerService(pickedFilePaths), new InMemorySettingsStore(),
+            new Infrastructure.Search.PhoneNGramIndexService(dbContextFactory));
     }
 
     [Fact]
