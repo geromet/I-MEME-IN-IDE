@@ -19,6 +19,7 @@ public class PhoneNGramIndexService(IDbContextFactory<MemeSearcherDbContext> dbC
         await using var context = await dbContextFactory.CreateDbContextAsync(cancellationToken);
 
         var transcripts = await context.Transcripts
+            .AsNoTracking()
             .Where(t => t.MediaId == mediaId)
             .Include(t => t.Segments)
             .ThenInclude(s => s.Words)

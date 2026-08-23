@@ -38,22 +38,36 @@ namespace MemeSearcher.Tests.Benchmarks;
 /// generation to PhoneticSearchService only - composite doesn't have this problem yet, and #10
 /// owns its own algorithm.
 ///
-/// **#9 result (2026-08-24, same machine, query "water", median of 3), also posted to issue #9**:
-/// candidate generation did *not* speed up `single` search.
+/// **#9 result, v1 (2026-08-24)**: the first version narrowed the DP inside each media's stream
+/// but still loaded and rebuilt *every* scoped media's full transcript graph up front - measured
+/// as a wash at 10 media and a ~5% regression at 100 (see issue #9's history for those numbers).
+/// A misunderstanding of the design: the actual win available is not touching a non-candidate
+/// media's transcript *at all*, not narrowing the DP inside media that get loaded regardless.
 ///
-///   media | single before | single after (indexed)
-///   ------|----------------|------------------------
-///     10  |          172ms |                   168ms (noise; longer queries went slightly slower)
-///    100  |       14,530ms |                15,247ms (~5% slower, consistent across all 3 queries)
+/// **#9 result, v2 (2026-08-24, same machine, median of 3), also posted to issue #9** - postings
+/// looked up in one batched, NGram-filtered query *before* any transcript is loaded, so a media
+/// with no candidate for the query is never loaded, never rebuilt, never scanned:
 ///
-/// Root cause: `SearchMediaAsync` allocates ~150MB per query at 100 media materializing every
-/// media's full transcript graph (Segments -> Words -> Phones) once per media, in parallel, per
-/// query - that allocation/loading cost, not the DP candidate generation narrows, is what scales
-/// superlinearly above. Candidate generation shrinks the DP step but adds a second per-media DB
-/// round-trip (the postings query) on top of the load that actually dominates, so it is a wash at
-/// best and a small regression at 100 media. Left wired into PhoneticSearchService anyway (the
-/// team's call, not assumed) - see issue #9 for the loading-cost investigation this motivates as a
-/// separate, later piece of work.
+///   media | query                       | single before | single after | allocated before | allocated after
+///   ------|------------------------------|----------------|---------------|-------------------|------------------
+///    10   | water                        |          176ms |         144ms |            15.4MB |           18.8MB
+///    10   | another question             |          189ms |         160ms |            16.0MB |           21.6MB
+///    10   | important sentence together  |          213ms |         177ms |            16.6MB |           22.4MB
+///   100   | water                        |       14,214ms |      13,701ms |           131.8MB |          110.4MB
+///   100   | another question             |       14,137ms |      14,735ms |           137.9MB |          143.9MB
+///   100   | important sentence together  |       14,379ms |      14,627ms |           143.4MB |          158.5MB
+///
+/// Mixed, and worth stating honestly rather than as a clean win: allocation - the more reliable
+/// signal for "was a media actually skipped" than wall-clock time on a shared machine - drops for
+/// the single-word query at 100 media (fewer trigrams, more selective) but *rises* for both
+/// multi-word queries, meaning few or no media were skippable for them on this corpus.
+/// `SyntheticCorpusGenerator` gives all 100 media the same 85-word vocabulary (#8), so a query
+/// built from several of those words has a real chance of matching *something* in nearly every
+/// media - the skip optimisation isn't disproven here, it's largely unmeasurable on a corpus this
+/// homogeneous. A corpus with vocabulary diversity across media (a separate generator change, not
+/// implemented here) would be needed to measure it properly. Left wired into PhoneticSearchService
+/// per the team's call either way - the correctness exit criteria (persistence, reproducible
+/// reindex, measured recall) hold regardless of the speed result.
 /// </summary>
 [Trait("Category", "Benchmark")]
 public class SearchBenchmarks(ITestOutputHelper output) : IDisposable

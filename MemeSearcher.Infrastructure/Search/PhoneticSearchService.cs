@@ -17,6 +17,17 @@ public class PhoneticSearchService(
     IPhonemizer phonemizer,
     IQueryPhonemizationCache queryCache) : IPhoneticSearchService
 {
+    /// <summary>
+    /// What to do for one media item, decided by <see cref="PlanMediaAsync"/> before any transcript
+    /// is loaded. <c>PostingsByNGram is null</c> means "load and scan the whole stream" - either
+    /// filtering isn't possible for this query/options at all, or this media has never been
+    /// indexed (#9's degrade-to-full-scan guarantee: unindexed must not mean unsearched). A
+    /// non-null dictionary means "load, but only run the matcher over windows seeded by these
+    /// postings". Media with postings but zero candidates for this query don't get a plan entry at
+    /// all - see PlanMediaAsync.
+    /// </summary>
+    private readonly record struct MediaSearchPlan(Guid MediaId, IReadOnlyDictionary<string, IReadOnlyList<int>>? PostingsByNGram);
+
     public async Task<IReadOnlyList<SearchResult>> SearchAsync(
         string queryText,
         string language,
@@ -38,9 +49,23 @@ public class PhoneticSearchService(
         }
 
         var mediaIds = await ResolveMediaIdsAsync(scope, cancellationToken);
+        if (mediaIds.Count == 0)
+        {
+            return [];
+        }
+
+        // Expansion and padding are properties of the query and options alone, not of any one
+        // media - computed once here and reused for every media below, rather than recomputed (or
+        // re-queried) per media the way the first version of this did.
+        var queryNGrams = PhoneNGramIndexer.Extract(queryTokens).Select(o => o.NGram).ToHashSet();
+        var padding = queryNGrams.Count == 0 ? null : PhoneNGramCandidateGenerator.SafePadding(queryTokens.Count, options);
+        var expandedNGrams = padding is null ? null : PhoneNGramCandidateGenerator.ExpandFuzzy(queryNGrams, options, queryTokens.Count);
+
+        var plans = await PlanMediaAsync(mediaIds, expandedNGrams, cancellationToken);
 
         var perMediaResults = await Task.WhenAll(
-            mediaIds.Select(mediaId => SearchMediaAsync(mediaId, queryTokens, queryPhonemeCount, options, cancellationToken)));
+            plans.Select(plan => SearchMediaAsync(
+                plan, queryTokens, queryPhonemeCount, padding, expandedNGrams, options, cancellationToken)));
 
         return perMediaResults
             .SelectMany(results => results)
@@ -73,17 +98,95 @@ public class PhoneticSearchService(
         throw new ArgumentOutOfRangeException(nameof(scope), scope, null);
     }
 
+    /// <summary>
+    /// Decides, for every scoped media, whether it needs to be loaded at all - *before* any
+    /// transcript is loaded (#9, corrected: the original version still loaded and rebuilt every
+    /// scoped media's full stream up front and only narrowed the DP step inside it, which measured
+    /// as no speedup at all - see issue #9's benchmark comment. The actual win is not touching a
+    /// media's transcript in the first place when it has no candidate for this query).
+    ///
+    /// One batched query across every scoped media, not one per media: the original per-media
+    /// postings round trip was itself part of the overhead this was supposed to remove.
+    /// </summary>
+    private async Task<List<MediaSearchPlan>> PlanMediaAsync(
+        List<Guid> mediaIds, HashSet<string>? expandedNGrams, CancellationToken cancellationToken)
+    {
+        if (expandedNGrams is null)
+        {
+            // Filtering isn't possible for this query/options at all (too short for a trigram, or
+            // options SafePadding can't bound) - every scoped media must be loaded and scanned in
+            // full, exactly like before #9. No postings query needed since nothing would use it.
+            return mediaIds.Select(id => new MediaSearchPlan(id, null)).ToList();
+        }
+
+        await using var context = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+
+        // Two queries, not one - filtering by NGram here is what makes this a narrow lookup
+        // instead of pulling every posting for every scoped media into memory (89k rows at 100
+        // media in testing, most of them thrown away unread). But that filter alone can't
+        // distinguish "never indexed" from "indexed, zero candidates for this query" - both would
+        // simply be absent from the result - so which media are indexed at all is asked for
+        // separately, to keep the degrade-to-full-scan guarantee correct.
+        var indexedMediaIds = await context.PhoneNGramPostings
+            .Where(p => mediaIds.Contains(p.MediaId))
+            .Select(p => p.MediaId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        var postings = await context.PhoneNGramPostings
+            .Where(p => mediaIds.Contains(p.MediaId) && expandedNGrams.Contains(p.NGram))
+            .Select(p => new { p.MediaId, p.NGram, p.StreamPosition })
+            .ToListAsync(cancellationToken);
+
+        var indexedMediaIdSet = indexedMediaIds.ToHashSet();
+        var postingsByMedia = postings
+            .GroupBy(p => p.MediaId)
+            .ToDictionary(
+                mediaGroup => mediaGroup.Key,
+                mediaGroup => mediaGroup
+                    .GroupBy(p => p.NGram)
+                    .ToDictionary(ngramGroup => ngramGroup.Key, IReadOnlyList<int> (ngramGroup) => ngramGroup.Select(p => p.StreamPosition).ToList()));
+
+        var plans = new List<MediaSearchPlan>();
+        foreach (var mediaId in mediaIds)
+        {
+            if (!indexedMediaIdSet.Contains(mediaId))
+            {
+                // Never indexed (or indexed before this media had a transcript) - degrade to a
+                // full scan rather than silently reporting zero results for it.
+                plans.Add(new MediaSearchPlan(mediaId, null));
+                continue;
+            }
+
+            if (!postingsByMedia.TryGetValue(mediaId, out var postingsByNGram))
+            {
+                // Indexed, but genuinely has no candidate for this query even after fuzzy
+                // expansion (the second query above filtered exactly this away) - the filter
+                // doing its job. No plan entry at all: this media's transcript is never loaded,
+                // never rebuilt into a stream, never scanned.
+                continue;
+            }
+
+            plans.Add(new MediaSearchPlan(mediaId, postingsByNGram));
+        }
+
+        return plans;
+    }
+
     private async Task<List<SearchResult>> SearchMediaAsync(
-        Guid mediaId,
+        MediaSearchPlan plan,
         IReadOnlyList<PhoneToken> queryTokens,
         int queryPhonemeCount,
+        int? padding,
+        HashSet<string>? expandedNGrams,
         PhoneticSearchOptions options,
         CancellationToken cancellationToken)
     {
         await using var context = await dbContextFactory.CreateDbContextAsync(cancellationToken);
 
         var transcripts = await context.Transcripts
-            .Where(t => t.MediaId == mediaId)
+            .AsNoTracking()
+            .Where(t => t.MediaId == plan.MediaId)
             .Include(t => t.Segments)
             .ThenInclude(s => s.Words)
             // Phones are loaded because PhoneStreamBuilder now prefers them over the predicted
@@ -101,70 +204,37 @@ public class PhoneticSearchService(
         var candidateStream = PhoneStreamBuilder.Build(transcripts);
         var candidateTokens = candidateStream.Select(e => e.Token).ToList();
 
-        var matches = await FindMatchesAsync(context, mediaId, queryTokens, candidateTokens, options, cancellationToken);
+        var matches = plan.PostingsByNGram is null
+            ? PhoneticSequenceMatcher.FindMatches(queryTokens, candidateTokens, options)
+            : WindowedFindMatches(queryTokens, candidateTokens, plan.PostingsByNGram, expandedNGrams!, padding!.Value, options);
 
         return matches
-            .Select(match => ToSearchResult(mediaId, match, candidateStream, queryTokens, queryPhonemeCount, options))
+            .Select(match => ToSearchResult(plan.MediaId, match, candidateStream, queryTokens, queryPhonemeCount, options))
             .Where(r => r.Score >= options.MinimumScore)
             .ToList();
     }
 
     /// <summary>
-    /// Candidate generation (#9): narrows the O(query * candidate) DP to windows around n-gram
-    /// hits, instead of running it over the whole media. Degrades to the pre-#9 full-stream scan -
-    /// not to zero results - whenever it can't safely filter: a query too short to form even one
-    /// trigram, or a media item with no postings at all (never indexed, or indexed before this
-    /// media had a transcript). A media *with* postings that genuinely has no candidate for this
-    /// query, even after fuzzy n-gram expansion, correctly returns no matches for it - that is the
-    /// filter doing its job, not a missing-index case.
+    /// Candidate generation (#9): narrows the O(query * candidate) DP to windows around this
+    /// media's own n-gram hits, instead of running it over the whole stream.
     /// </summary>
-    private static async Task<IReadOnlyList<PhoneticMatchSpan>> FindMatchesAsync(
-        MemeSearcherDbContext context,
-        Guid mediaId,
+    private static IReadOnlyList<PhoneticMatchSpan> WindowedFindMatches(
         IReadOnlyList<PhoneToken> queryTokens,
         List<PhoneToken> candidateTokens,
-        PhoneticSearchOptions options,
-        CancellationToken cancellationToken)
+        IReadOnlyDictionary<string, IReadOnlyList<int>> postingsByNGram,
+        HashSet<string> expandedNGrams,
+        int padding,
+        PhoneticSearchOptions options)
     {
-        var queryNGrams = PhoneNGramIndexer.Extract(queryTokens).Select(o => o.NGram).ToHashSet();
-        if (queryNGrams.Count == 0)
-        {
-            return PhoneticSequenceMatcher.FindMatches(queryTokens, candidateTokens, options);
-        }
-
-        // Bound *before* touching the database: these options simply cannot be windowed safely
-        // (e.g. a caller-supplied InsertionCost of 0), so there is nothing a postings lookup could
-        // do to help - skip straight to the pre-#9 full scan.
-        var padding = PhoneNGramCandidateGenerator.SafePadding(queryTokens.Count, options);
-        if (padding is null)
-        {
-            return PhoneticSequenceMatcher.FindMatches(queryTokens, candidateTokens, options);
-        }
-
-        var postings = await context.PhoneNGramPostings
-            .Where(p => p.MediaId == mediaId)
-            .Select(p => new { p.NGram, p.StreamPosition })
-            .ToListAsync(cancellationToken);
-
-        if (postings.Count == 0)
-        {
-            return PhoneticSequenceMatcher.FindMatches(queryTokens, candidateTokens, options);
-        }
-
-        var postingsByNGram = postings
-            .GroupBy(p => p.NGram)
-            .ToDictionary(g => g.Key, IReadOnlyList<int> (g) => g.Select(p => p.StreamPosition).ToList());
-
-        var expandedNGrams = PhoneNGramCandidateGenerator.ExpandFuzzy(queryNGrams, options, queryTokens.Count);
-
-        // ExpandFuzzy only ever adds to a non-empty set (queryNGrams.Count > 0 was just checked),
-        // so GenerateWindows cannot return null here - it can still return an empty list, meaning
-        // "looked, found no candidate anywhere", which is a real (measured, not assumed) outcome.
+        // PlanMediaAsync only produces this plan when at least one expanded n-gram is present in
+        // postingsByNGram, so GenerateWindows cannot return null (that only happens for an empty
+        // n-gram set) - it can still return an empty list, which would mean the same "no candidate
+        // anywhere" outcome PlanMediaAsync already filters out before this is ever called.
         var windows = PhoneNGramCandidateGenerator.GenerateWindows(
             expandedNGrams,
             ngram => postingsByNGram.GetValueOrDefault(ngram, []),
             candidateTokens.Count,
-            padding: padding.Value)!;
+            padding)!;
 
         // Each window is its own FindMatches call with its own local-minima suppression, so a
         // below-threshold run straddling two windows would otherwise surface once per window
