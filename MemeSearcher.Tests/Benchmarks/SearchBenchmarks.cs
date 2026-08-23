@@ -22,6 +22,21 @@ namespace MemeSearcher.Tests.Benchmarks;
 ///
 /// This milestone must not change production behaviour - a baseline measured against modified code
 /// is not a baseline.
+///
+/// **Recorded baseline (2026-08-23, this machine, query "water", median of 3), also posted to
+/// issue #8**, kept here because #9 changes the code these numbers describe and a "before" is
+/// worthless once it can no longer be reproduced against the code it was measured on:
+///
+///   media | single (ms) | composite (ms) | db size
+///   ------|-------------|-----------------|--------
+///     10  |         177 |              89 |   2.5 MB
+///    100  |      14,700 |             701 |  10.7 MB
+///    400  |     278,764 |           3,150 |  29.9 MB
+///
+/// `single` (PhoneticSearchService) scales worse than quadratically (100->400 is 4x the data,
+/// ~19x the time); `composite` stays close to linear (~4.5x). This is why #9 scopes candidate
+/// generation to PhoneticSearchService only - composite doesn't have this problem yet, and #10
+/// owns its own algorithm.
 /// </summary>
 [Trait("Category", "Benchmark")]
 public class SearchBenchmarks(ITestOutputHelper output) : IDisposable
