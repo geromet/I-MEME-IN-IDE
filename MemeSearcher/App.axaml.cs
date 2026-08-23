@@ -74,6 +74,9 @@ public partial class App : Application
         services.AddSingleton<SettingsRegistry>();
 
         services.AddSingleton(TranscriptParserFactory.CreateDefault());
+        // #9: independently registered so IndexMediaAsync/ReindexAllAsync are callable on their
+        // own (e.g. a repair run) - MediaIngestionService only invokes it, doesn't own it.
+        services.AddScoped<IPhoneNGramIndexService, PhoneNGramIndexService>();
         services.AddScoped<MediaIngestionService>();
 
         // Every locator gets the settings store and the tool category: without them a locator

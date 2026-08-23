@@ -11,6 +11,7 @@ public class MemeSearcherDbContext(DbContextOptions<MemeSearcherDbContext> optio
     public DbSet<Word> Words => Set<Word>();
     public DbSet<Phone> Phones => Set<Phone>();
     public DbSet<SearchHistoryEntry> SearchHistory => Set<SearchHistoryEntry>();
+    public DbSet<PhoneNGramPosting> PhoneNGramPostings => Set<PhoneNGramPosting>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -92,6 +93,22 @@ public class MemeSearcherDbContext(DbContextOptions<MemeSearcherDbContext> optio
             entity.Property(h => h.ScopeDescription).IsRequired();
 
             entity.HasIndex(h => h.SearchedAt);
+        });
+
+        modelBuilder.Entity<PhoneNGramPosting>(entity =>
+        {
+            entity.HasKey(p => p.Id);
+            entity.Property(p => p.NGram).IsRequired();
+
+            // Lookup shape is always "this media's postings for one of these n-grams" (#9) - the
+            // composite index covers that directly, and also enforces that a reindex can never
+            // leave two rows claiming the same position for the same n-gram in the same media.
+            entity.HasIndex(p => new { p.MediaId, p.NGram, p.StreamPosition }).IsUnique();
+
+            entity.HasOne<Media>()
+                .WithMany()
+                .HasForeignKey(p => p.MediaId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

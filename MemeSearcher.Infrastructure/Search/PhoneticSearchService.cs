@@ -101,12 +101,100 @@ public class PhoneticSearchService(
         var candidateStream = PhoneStreamBuilder.Build(transcripts);
         var candidateTokens = candidateStream.Select(e => e.Token).ToList();
 
-        var matches = PhoneticSequenceMatcher.FindMatches(queryTokens, candidateTokens, options);
+        var matches = await FindMatchesAsync(context, mediaId, queryTokens, candidateTokens, options, cancellationToken);
 
         return matches
             .Select(match => ToSearchResult(mediaId, match, candidateStream, queryTokens, queryPhonemeCount, options))
             .Where(r => r.Score >= options.MinimumScore)
             .ToList();
+    }
+
+    /// <summary>
+    /// Candidate generation (#9): narrows the O(query * candidate) DP to windows around n-gram
+    /// hits, instead of running it over the whole media. Degrades to the pre-#9 full-stream scan -
+    /// not to zero results - whenever it can't safely filter: a query too short to form even one
+    /// trigram, or a media item with no postings at all (never indexed, or indexed before this
+    /// media had a transcript). A media *with* postings that genuinely has no candidate for this
+    /// query, even after fuzzy n-gram expansion, correctly returns no matches for it - that is the
+    /// filter doing its job, not a missing-index case.
+    /// </summary>
+    private static async Task<IReadOnlyList<PhoneticMatchSpan>> FindMatchesAsync(
+        MemeSearcherDbContext context,
+        Guid mediaId,
+        IReadOnlyList<PhoneToken> queryTokens,
+        List<PhoneToken> candidateTokens,
+        PhoneticSearchOptions options,
+        CancellationToken cancellationToken)
+    {
+        var queryNGrams = PhoneNGramIndexer.Extract(queryTokens).Select(o => o.NGram).ToHashSet();
+        if (queryNGrams.Count == 0)
+        {
+            return PhoneticSequenceMatcher.FindMatches(queryTokens, candidateTokens, options);
+        }
+
+        // Bound *before* touching the database: these options simply cannot be windowed safely
+        // (e.g. a caller-supplied InsertionCost of 0), so there is nothing a postings lookup could
+        // do to help - skip straight to the pre-#9 full scan.
+        var padding = PhoneNGramCandidateGenerator.SafePadding(queryTokens.Count, options);
+        if (padding is null)
+        {
+            return PhoneticSequenceMatcher.FindMatches(queryTokens, candidateTokens, options);
+        }
+
+        var postings = await context.PhoneNGramPostings
+            .Where(p => p.MediaId == mediaId)
+            .Select(p => new { p.NGram, p.StreamPosition })
+            .ToListAsync(cancellationToken);
+
+        if (postings.Count == 0)
+        {
+            return PhoneticSequenceMatcher.FindMatches(queryTokens, candidateTokens, options);
+        }
+
+        var postingsByNGram = postings
+            .GroupBy(p => p.NGram)
+            .ToDictionary(g => g.Key, IReadOnlyList<int> (g) => g.Select(p => p.StreamPosition).ToList());
+
+        var expandedNGrams = PhoneNGramCandidateGenerator.ExpandFuzzy(queryNGrams, options.SubstitutionMaxCost);
+
+        // ExpandFuzzy only ever adds to a non-empty set (queryNGrams.Count > 0 was just checked),
+        // so GenerateWindows cannot return null here - it can still return an empty list, meaning
+        // "looked, found no candidate anywhere", which is a real (measured, not assumed) outcome.
+        var windows = PhoneNGramCandidateGenerator.GenerateWindows(
+            expandedNGrams,
+            ngram => postingsByNGram.GetValueOrDefault(ngram, []),
+            candidateTokens.Count,
+            padding: padding.Value)!;
+
+        return windows
+            .SelectMany(window => RunWindow(queryTokens, candidateTokens, window, options))
+            .ToList();
+    }
+
+    private static IEnumerable<PhoneticMatchSpan> RunWindow(
+        IReadOnlyList<PhoneToken> queryTokens,
+        List<PhoneToken> candidateTokens,
+        PhoneNGramCandidateGenerator.Window window,
+        PhoneticSearchOptions options)
+    {
+        if (window.Length == 0)
+        {
+            yield break;
+        }
+
+        var slice = candidateTokens.GetRange(window.Start, window.Length);
+
+        foreach (var match in PhoneticSequenceMatcher.FindMatches(queryTokens, slice, options))
+        {
+            yield return match with
+            {
+                Start = match.Start + window.Start,
+                End = match.End + window.Start,
+                Correspondences = match.Correspondences
+                    .Select(c => (c.QueryIndex, c.CandidateIndex + window.Start))
+                    .ToList(),
+            };
+        }
     }
 
     private static SearchResult ToSearchResult(

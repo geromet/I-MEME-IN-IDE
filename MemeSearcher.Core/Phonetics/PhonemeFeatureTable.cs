@@ -249,6 +249,35 @@ public static class PhonemeFeatureTable
             : ConsonantDistance(featureA, featureB) * maxCost;
     }
 
+    /// <summary>
+    /// Every known symbol whose normalized distance from <paramref name="symbol"/> is at most
+    /// <paramref name="threshold"/> (using <see cref="SubstitutionCost"/> at a fixed scale of 1.0 -
+    /// not the caller's own maxCost, which would just rescale the threshold along with the
+    /// distance and leave the comparison unchanged), excluding the symbol itself. This is the
+    /// "phonetically similar phoneme" primitive #9's candidate generation needs to expand a query
+    /// n-gram into the near-miss variants an exact-match index would otherwise never find. An
+    /// unknown symbol has no known neighbours (its distance to everything is the flat
+    /// <see cref="UnknownSymbolCost"/> penalty, not a real feature-based distance), so it returns
+    /// empty rather than a meaningless answer.
+    ///
+    /// <paramref name="threshold"/> is a normalized distance in roughly [0, 1.25]: 0.3 already
+    /// separates a voicing-only pair like s/z (&lt; 0.3, see
+    /// PhonemeFeatureTableTests.SubstitutionCost_VoicingPairsAreVeryClose) from a substantially
+    /// different consonant, and anything above 1.0 starts admitting cross-class (vowel/consonant)
+    /// substitutions via <see cref="CrossClassMultiplier"/>.
+    /// </summary>
+    public static IReadOnlyList<string> NearbySymbols(string symbol, double threshold)
+    {
+        if (!Features.ContainsKey(symbol))
+        {
+            return [];
+        }
+
+        return Features.Keys
+            .Where(candidate => candidate != symbol && SubstitutionCost(symbol, candidate, maxCost: 1.0) <= threshold)
+            .ToArray();
+    }
+
     private static double ConsonantDistance(PhonemeFeature a, PhonemeFeature b)
     {
         var placeDistance = Math.Abs((int)a.Place - (int)b.Place) / 7.0;

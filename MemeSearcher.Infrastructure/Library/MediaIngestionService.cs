@@ -13,9 +13,15 @@ namespace MemeSearcher.Infrastructure.Library;
 /// Orchestrates the "Source file(s) -> identify media -> transcribe (if needed) -> phonemize ->
 /// build phoneme stream" pipeline (addendum §6). As of Milestone 3, "import transcript" can mean
 /// either parsing an existing SRT/VTT/text file or transcribing the media directly via
-/// ITranscriptionProvider when no transcript file was given. Indexing (candidate generation for
-/// search) is a separate, independently rerunnable stage - see addendum §5, §28 - and is not done
-/// here.
+/// ITranscriptionProvider when no transcript file was given.
+///
+/// Indexing (candidate generation for search, #9) is a separate, independently rerunnable stage -
+/// see addendum §5, §28, §39 - implemented in its own service and only *invoked* from here, once
+/// per import/realignment, so it stays reachable and correct on its own via
+/// <c>IPhoneNGramIndexService.ReindexAllAsync</c> without this class's involvement. Optional
+/// (defaults to null, matching <paramref name="alignmentProvider"/>'s pattern below): a caller that
+/// doesn't wire one up keeps working exactly as before #9, just without a persistent index to
+/// speed search up.
 /// </summary>
 public class MediaIngestionService(
     MemeSearcherDbContext dbContext,
@@ -23,7 +29,8 @@ public class MediaIngestionService(
     IPhonemizer phonemizer,
     ITranscriptionProvider transcriptionProvider,
     MediaMetadataProbe metadataProbe,
-    IAlignmentProvider? alignmentProvider = null)
+    IAlignmentProvider? alignmentProvider = null,
+    IPhoneNGramIndexService? indexService = null)
 {
     public async Task<MediaIngestionResult> ImportAsync(
         MediaIngestionRequest request,
@@ -86,6 +93,11 @@ public class MediaIngestionService(
         dbContext.Transcripts.Add(transcript);
 
         await dbContext.SaveChangesAsync(cancellationToken);
+
+        if (indexService is not null)
+        {
+            await indexService.IndexMediaAsync(media.Id, cancellationToken);
+        }
 
         return new MediaIngestionResult(MediaIngestionOutcome.Imported, media);
     }
@@ -204,6 +216,15 @@ public class MediaIngestionService(
 
         media.UpdatedAt = DateTimeOffset.UtcNow;
         await dbContext.SaveChangesAsync(cancellationToken);
+
+        // Realignment can replace a word's phones wholesale (above), which changes the canonical
+        // phoneme stream the index was built from - a posting left over from before this run would
+        // point at symbols that no longer exist, so the index must be rebuilt here too, not just on
+        // import (#9).
+        if (indexService is not null)
+        {
+            await indexService.IndexMediaAsync(mediaId, cancellationToken);
+        }
 
         // Coverage of the *canonical* symbols, since that is what the matcher will actually see -
         // reporting coverage of the native ARPABET/IPA forms would measure the wrong thing (#31).

@@ -152,7 +152,14 @@ public static class PhoneticSequenceMatcher
         return (j, correspondences);
     }
 
-    private static double MaxAcceptableCost(int queryLength, PhoneticSearchOptions options)
+    /// <summary>
+    /// The total edit cost a match may accept before <see cref="MinimumScore"/> would reject it.
+    /// Public because #9's candidate generation needs the exact same number to bound how far a
+    /// match could plausibly extend past the query's own length (via insertions/deletions) - a
+    /// second, drifted copy of this formula would silently stop being "recall-safe" the moment one
+    /// copy changed and the other didn't.
+    /// </summary>
+    public static double MaxAcceptableCost(int queryLength, PhoneticSearchOptions options)
     {
         var ceiling = queryLength * options.SubstitutionMaxCost;
         var normalizedFloor = 1 - options.MinimumScore;
