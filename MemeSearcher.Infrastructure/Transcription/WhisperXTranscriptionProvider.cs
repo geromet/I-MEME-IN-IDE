@@ -57,7 +57,7 @@ public class WhisperXTranscriptionProvider(
         var outputDir = Directory.CreateTempSubdirectory("memesearcher-whisperx-").FullName;
         try
         {
-            await RunWhisperXAsync(status.ExecutablePath!, mediaPath, whisperCode, provenance, outputDir, cancellationToken);
+            await RunWhisperXAsync(status, mediaPath, whisperCode, provenance, outputDir, cancellationToken);
 
             var outputJsonPath = Path.Combine(outputDir, Path.GetFileNameWithoutExtension(mediaPath) + ".json");
             if (!File.Exists(outputJsonPath))
@@ -153,14 +153,14 @@ public class WhisperXTranscriptionProvider(
     }
 
     private static async Task RunWhisperXAsync(
-        string executablePath,
+        ExternalToolStatus status,
         string mediaPath,
         string? whisperCode,
         TranscriptionProvenance provenance,
         string outputDir,
         CancellationToken cancellationToken)
     {
-        var startInfo = new ProcessStartInfo(executablePath)
+        var startInfo = new ProcessStartInfo(status.ExecutablePath!)
         {
             RedirectStandardOutput = true,
             RedirectStandardError = true,
@@ -186,8 +186,8 @@ public class WhisperXTranscriptionProvider(
             startInfo.ArgumentList.Add(whisperCode);
         }
 
-        using var process = Process.Start(startInfo)
-            ?? throw new InvalidOperationException($"Failed to start '{executablePath}'.");
+        using var process = Process.Start(startInfo.ApplyToolEnvironment(status))
+            ?? throw new InvalidOperationException($"Failed to start '{status.ExecutablePath}'.");
 
         var stderrTask = process.StandardError.ReadToEndAsync(cancellationToken);
         await process.WaitForExitAsync(cancellationToken);

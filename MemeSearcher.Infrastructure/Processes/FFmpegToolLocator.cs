@@ -1,52 +1,21 @@
-using System.Diagnostics;
-using MemeSearcher.Core.Interfaces;
+using MemeSearcher.Core.Settings;
+using MemeSearcher.Infrastructure.Settings;
 
 namespace MemeSearcher.Infrastructure.Processes;
 
 /// <summary>Locates the system-installed ffmpeg executable - same rationale as EspeakToolLocator.</summary>
-public class FFmpegToolLocator : IExternalToolLocator
+public class FFmpegToolLocator(ISettingsStore? settingsStore = null, ExternalToolSettings? toolSettings = null)
+    : ExternalToolLocatorBase(settingsStore, toolSettings)
 {
-    public string ToolName => "ffmpeg";
+    public override string ToolName => "ffmpeg";
 
-    public async Task<ExternalToolStatus> LocateAsync(CancellationToken cancellationToken = default)
-    {
-        var executableName = OperatingSystem.IsWindows() ? "ffmpeg.exe" : "ffmpeg";
-        var executablePath = ProcessPathResolver.FindOnPath(executableName);
+    protected override string ExecutableBaseName => "ffmpeg";
 
-        if (executablePath is null)
-        {
-            return new ExternalToolStatus(
-                IsInstalled: false,
-                ExecutablePath: null,
-                Version: null,
-                Error: $"'{executableName}' was not found on PATH. Install FFmpeg: https://ffmpeg.org/download.html");
-        }
+    protected override string VersionArgument => "-version";
 
-        try
-        {
-            var version = await GetVersionAsync(executablePath, cancellationToken);
-            return new ExternalToolStatus(true, executablePath, version, null);
-        }
-        catch (Exception ex)
-        {
-            return new ExternalToolStatus(false, executablePath, null, $"Found '{executableName}' but failed to run it: {ex.Message}");
-        }
-    }
+    protected override string InstallHint => "Install FFmpeg: https://ffmpeg.org/download.html";
 
-    private static async Task<string> GetVersionAsync(string executablePath, CancellationToken cancellationToken)
-    {
-        var startInfo = new ProcessStartInfo(executablePath, "-version")
-        {
-            RedirectStandardOutput = true,
-            UseShellExecute = false,
-        };
-
-        using var process = Process.Start(startInfo)
-            ?? throw new InvalidOperationException($"Failed to start '{executablePath}'.");
-
-        var output = await process.StandardOutput.ReadToEndAsync(cancellationToken);
-        await process.WaitForExitAsync(cancellationToken);
-
-        return output.Split('\n').FirstOrDefault()?.Trim() ?? output.Trim();
-    }
+    // First line looks like "ffmpeg version 6.1.1 Copyright (c) ...".
+    protected override string ParseVersion(string output) =>
+        output.Split('\n').FirstOrDefault()?.Trim() ?? output.Trim();
 }

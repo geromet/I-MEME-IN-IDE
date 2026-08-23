@@ -2,6 +2,7 @@ using System.Diagnostics;
 using MemeSearcher.Core.Interfaces;
 using MemeSearcher.Core.Languages;
 using MemeSearcher.Core.Phonetics;
+using MemeSearcher.Infrastructure.Processes;
 using MemeSearcher.Core.Transcripts;
 
 namespace MemeSearcher.Infrastructure.Phonetics;
@@ -45,7 +46,7 @@ public class EspeakPhonemizer(IExternalToolLocator toolLocator) : IPhonemizer
         // name reaches espeak-ng and comes back as a silent fallback to the default voice.
         var voice = LanguageCatalog.Get(language).EspeakVoice;
 
-        var wordGroups = await RunEspeakAsync(status.ExecutablePath!, voice, string.Join(' ', words), cancellationToken);
+        var wordGroups = await RunEspeakAsync(status, voice, string.Join(' ', words), cancellationToken);
 
         var phonemizedWords = BuildPhonemizedWords(words, wordGroups);
 
@@ -85,12 +86,12 @@ public class EspeakPhonemizer(IExternalToolLocator toolLocator) : IPhonemizer
     private static string ToDisplayIpa(string sepDelimitedGroup) => sepDelimitedGroup.Replace("_", "");
 
     private static async Task<string[]> RunEspeakAsync(
-        string executablePath,
+        ExternalToolStatus status,
         string voice,
         string inputLine,
         CancellationToken cancellationToken)
     {
-        var startInfo = new ProcessStartInfo(executablePath)
+        var startInfo = new ProcessStartInfo(status.ExecutablePath!)
         {
             RedirectStandardInput = true,
             RedirectStandardOutput = true,
@@ -103,8 +104,8 @@ public class EspeakPhonemizer(IExternalToolLocator toolLocator) : IPhonemizer
         startInfo.ArgumentList.Add("-q");
         startInfo.ArgumentList.Add("--sep=_");
 
-        using var process = Process.Start(startInfo)
-            ?? throw new InvalidOperationException($"Failed to start '{executablePath}'.");
+        using var process = Process.Start(startInfo.ApplyToolEnvironment(status))
+            ?? throw new InvalidOperationException($"Failed to start '{status.ExecutablePath}'.");
 
         await process.StandardInput.WriteLineAsync(inputLine);
         process.StandardInput.Close();

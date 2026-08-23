@@ -65,19 +65,25 @@ public partial class App : Application
         services.AddSingleton<CudaAvailabilityProbe>();
         services.AddSingleton<WhisperXSettings>();
         services.AddSingleton<ISettingsCategory>(sp => sp.GetRequiredService<WhisperXSettings>());
+        services.AddSingleton<ExternalToolSettings>();
+        services.AddSingleton<ISettingsCategory>(sp => sp.GetRequiredService<ExternalToolSettings>());
         services.AddSingleton<SettingsRegistry>();
 
         services.AddSingleton(TranscriptParserFactory.CreateDefault());
         services.AddScoped<MediaIngestionService>();
 
-        services.AddSingleton<IExternalToolLocator, EspeakToolLocator>();
+        // Every locator gets the settings store and the tool category: without them a locator
+        // silently ignores its configured path and keeps reporting "not found on PATH".
+        services.AddSingleton<IExternalToolLocator>(sp => new EspeakToolLocator(
+            sp.GetRequiredService<ISettingsStore>(), sp.GetRequiredService<ExternalToolSettings>()));
         services.AddSingleton<IPhonemizer, EspeakPhonemizer>();
 
         // Milestone 3: not registered as IExternalToolLocator, since only one implementation of
         // that interface can be resolved via DI at a time and espeak already claims it -
         // WhisperXTranscriptionProvider/MediaMetadataProbe depend on their concrete locator types
         // directly instead.
-        services.AddSingleton<WhisperXToolLocator>();
+        services.AddSingleton(sp => new WhisperXToolLocator(
+            sp.GetRequiredService<ISettingsStore>(), sp.GetRequiredService<ExternalToolSettings>()));
         services.AddSingleton<ITranscriptionProvider, WhisperXTranscriptionProvider>();
         // Milestone 6: MFA is the default IAlignmentProvider consumed by
         // MediaIngestionService.RealignAsync, since it's the provider that can produce phone-level
@@ -85,11 +91,14 @@ public partial class App : Application
         // registered as its own concrete type so it's still available/testable, but no longer
         // claims the shared interface slot.
         services.AddSingleton<WhisperXAlignmentProvider>();
-        services.AddSingleton<MfaToolLocator>();
+        services.AddSingleton(sp => new MfaToolLocator(
+            sp.GetRequiredService<ISettingsStore>(), sp.GetRequiredService<ExternalToolSettings>()));
         services.AddSingleton<IAlignmentProvider, MfaAlignmentProvider>();
-        services.AddSingleton<FFprobeToolLocator>();
+        services.AddSingleton(sp => new FFprobeToolLocator(
+            sp.GetRequiredService<ISettingsStore>(), sp.GetRequiredService<ExternalToolSettings>()));
         services.AddSingleton<MediaMetadataProbe>();
-        services.AddSingleton<FFmpegToolLocator>();
+        services.AddSingleton(sp => new FFmpegToolLocator(
+            sp.GetRequiredService<ISettingsStore>(), sp.GetRequiredService<ExternalToolSettings>()));
         services.AddSingleton<FFmpegClipExtractor>();
 
         // Milestone 7: shared across the app's lifetime (not per-scope) so repeat searches

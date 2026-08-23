@@ -47,7 +47,7 @@ public class MfaAlignmentProvider(MfaToolLocator toolLocator) : IAlignmentProvid
             LinkOrCopy(mediaPath, corpusMediaPath);
             await File.WriteAllTextAsync(corpusLabPath, transcriptText, cancellationToken);
 
-            await RunMfaAsync(status.ExecutablePath!, corpusDir, outputDir, cancellationToken);
+            await RunMfaAsync(status, corpusDir, outputDir, cancellationToken);
 
             var textGridPath = Path.Combine(outputDir, baseName + ".TextGrid");
             if (!File.Exists(textGridPath))
@@ -107,9 +107,10 @@ public class MfaAlignmentProvider(MfaToolLocator toolLocator) : IAlignmentProvid
         }
     }
 
-    private static async Task RunMfaAsync(string mfaPath, string corpusDir, string outputDir, CancellationToken cancellationToken)
+    private static async Task RunMfaAsync(
+        ExternalToolStatus status, string corpusDir, string outputDir, CancellationToken cancellationToken)
     {
-        var startInfo = new ProcessStartInfo(mfaPath)
+        var startInfo = new ProcessStartInfo(status.ExecutablePath!)
         {
             RedirectStandardOutput = true,
             RedirectStandardError = true,
@@ -122,8 +123,8 @@ public class MfaAlignmentProvider(MfaToolLocator toolLocator) : IAlignmentProvid
         startInfo.ArgumentList.Add(outputDir);
         startInfo.ArgumentList.Add("--clean");
 
-        using var process = Process.Start(startInfo)
-            ?? throw new InvalidOperationException($"Failed to start '{mfaPath}'.");
+        using var process = Process.Start(startInfo.ApplyToolEnvironment(status))
+            ?? throw new InvalidOperationException($"Failed to start '{status.ExecutablePath}'.");
 
         var stderrTask = process.StandardError.ReadToEndAsync(cancellationToken);
         await process.WaitForExitAsync(cancellationToken);

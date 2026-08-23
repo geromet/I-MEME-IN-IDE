@@ -34,7 +34,7 @@ public class MediaMetadataProbe(FFprobeToolLocator toolLocator)
         startInfo.ArgumentList.Add("json");
         startInfo.ArgumentList.Add(mediaPath);
 
-        using var process = Process.Start(startInfo);
+        using var process = Process.Start(startInfo.ApplyToolEnvironment(status));
         if (process is null)
         {
             return null;

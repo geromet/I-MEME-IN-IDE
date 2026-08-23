@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using MemeSearcher.Core.Interfaces;
 using MemeSearcher.Infrastructure.Processes;
 
 namespace MemeSearcher.Infrastructure.Ffmpeg;
@@ -30,7 +31,7 @@ public class FFmpegClipExtractor(FFmpegToolLocator toolLocator)
             return new ClipExtractionResult(false, null, $"Media file not found: {mediaPath}");
         }
 
-        return await ExtractOneAsync(status.ExecutablePath!, mediaPath, startSeconds, endSeconds, outputPath, cancellationToken);
+        return await ExtractOneAsync(status, mediaPath, startSeconds, endSeconds, outputPath, cancellationToken);
     }
 
     public async Task<ClipExtractionResult> ExtractCompositeAsync(
@@ -64,7 +65,7 @@ public class FFmpegClipExtractor(FFmpegToolLocator toolLocator)
                 }
 
                 var partPath = Path.Combine(workDir, $"part{i}{extension}");
-                var partResult = await ExtractOneAsync(status.ExecutablePath!, mediaPath, start, end, partPath, cancellationToken);
+                var partResult = await ExtractOneAsync(status, mediaPath, start, end, partPath, cancellationToken);
                 if (!partResult.Success)
                 {
                     return new ClipExtractionResult(false, null, $"Failed to extract component {i + 1}: {partResult.Error}");
@@ -80,7 +81,7 @@ public class FFmpegClipExtractor(FFmpegToolLocator toolLocator)
                 cancellationToken);
 
             return await RunFFmpegAsync(
-                status.ExecutablePath!,
+                status,
                 ["-y", "-f", "concat", "-safe", "0", "-i", concatListPath, "-c", "copy", outputPath],
                 outputPath,
                 cancellationToken);
@@ -99,13 +100,13 @@ public class FFmpegClipExtractor(FFmpegToolLocator toolLocator)
     }
 
     private static async Task<ClipExtractionResult> ExtractOneAsync(
-        string ffmpegPath, string mediaPath, double startSeconds, double endSeconds, string outputPath, CancellationToken cancellationToken)
+        ExternalToolStatus status, string mediaPath, double startSeconds, double endSeconds, string outputPath, CancellationToken cancellationToken)
     {
         var start = startSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
         var end = endSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
 
         var copyResult = await RunFFmpegAsync(
-            ffmpegPath, ["-y", "-i", mediaPath, "-ss", start, "-to", end, "-c", "copy", outputPath], outputPath, cancellationToken);
+            status, ["-y", "-i", mediaPath, "-ss", start, "-to", end, "-c", "copy", outputPath], outputPath, cancellationToken);
         if (copyResult.Success)
         {
             return copyResult;
@@ -114,13 +115,13 @@ public class FFmpegClipExtractor(FFmpegToolLocator toolLocator)
         // Stream copy can fail when the cut points aren't on keyframe boundaries for this
         // codec/container - re-encoding is slower but always works.
         return await RunFFmpegAsync(
-            ffmpegPath, ["-y", "-i", mediaPath, "-ss", start, "-to", end, outputPath], outputPath, cancellationToken);
+            status, ["-y", "-i", mediaPath, "-ss", start, "-to", end, outputPath], outputPath, cancellationToken);
     }
 
     private static async Task<ClipExtractionResult> RunFFmpegAsync(
-        string ffmpegPath, IEnumerable<string> arguments, string outputPath, CancellationToken cancellationToken)
+        ExternalToolStatus status, IEnumerable<string> arguments, string outputPath, CancellationToken cancellationToken)
     {
-        var startInfo = new ProcessStartInfo(ffmpegPath)
+        var startInfo = new ProcessStartInfo(status.ExecutablePath!)
         {
             RedirectStandardOutput = true,
             RedirectStandardError = true,
@@ -131,8 +132,8 @@ public class FFmpegClipExtractor(FFmpegToolLocator toolLocator)
             startInfo.ArgumentList.Add(arg);
         }
 
-        using var process = Process.Start(startInfo)
-            ?? throw new InvalidOperationException($"Failed to start '{ffmpegPath}'.");
+        using var process = Process.Start(startInfo.ApplyToolEnvironment(status))
+            ?? throw new InvalidOperationException($"Failed to start '{status.ExecutablePath}'.");
 
         var stderrTask = process.StandardError.ReadToEndAsync(cancellationToken);
         await process.WaitForExitAsync(cancellationToken);

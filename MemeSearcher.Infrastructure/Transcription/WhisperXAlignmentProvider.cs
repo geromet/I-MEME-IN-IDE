@@ -42,7 +42,7 @@ public class WhisperXAlignmentProvider(WhisperXToolLocator toolLocator) : IAlign
         var outputDir = Directory.CreateTempSubdirectory("memesearcher-whisperx-align-").FullName;
         try
         {
-            await RunWhisperXAsync(status.ExecutablePath!, mediaPath, outputDir, cancellationToken);
+            await RunWhisperXAsync(status, mediaPath, outputDir, cancellationToken);
 
             var outputJsonPath = Path.Combine(outputDir, Path.GetFileNameWithoutExtension(mediaPath) + ".json");
             if (!File.Exists(outputJsonPath))
@@ -74,9 +74,10 @@ public class WhisperXAlignmentProvider(WhisperXToolLocator toolLocator) : IAlign
         }
     }
 
-    private static async Task RunWhisperXAsync(string executablePath, string mediaPath, string outputDir, CancellationToken cancellationToken)
+    private static async Task RunWhisperXAsync(
+        ExternalToolStatus status, string mediaPath, string outputDir, CancellationToken cancellationToken)
     {
-        var startInfo = new ProcessStartInfo(executablePath)
+        var startInfo = new ProcessStartInfo(status.ExecutablePath!)
         {
             RedirectStandardOutput = true,
             RedirectStandardError = true,
@@ -90,8 +91,8 @@ public class WhisperXAlignmentProvider(WhisperXToolLocator toolLocator) : IAlign
         startInfo.ArgumentList.Add("--compute_type");
         startInfo.ArgumentList.Add("float32");
 
-        using var process = Process.Start(startInfo)
-            ?? throw new InvalidOperationException($"Failed to start '{executablePath}'.");
+        using var process = Process.Start(startInfo.ApplyToolEnvironment(status))
+            ?? throw new InvalidOperationException($"Failed to start '{status.ExecutablePath}'.");
 
         var stderrTask = process.StandardError.ReadToEndAsync(cancellationToken);
         await process.WaitForExitAsync(cancellationToken);
