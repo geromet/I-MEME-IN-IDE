@@ -17,4 +17,5 @@ public record MediaSummary(
     DateTimeOffset CreatedAt,
     int SegmentCount,
     int WordCount,
-    int PhonemizedWordCount);
+    int PhonemizedWordCount,
+    bool IsSelectedForSearch);

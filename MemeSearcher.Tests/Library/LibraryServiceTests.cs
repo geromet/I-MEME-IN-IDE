@@ -198,6 +198,121 @@ public class LibraryServiceTests : IDisposable
         Assert.False(File.Exists(path));
     }
 
+    [Fact]
+    public async Task GetAllAsync_NewlyImportedMedia_DefaultsToSelectedForSearch()
+    {
+        var setup = await TrySetUpAsync();
+        if (setup is null)
+        {
+            return;
+        }
+
+        var (library, factory) = setup.Value;
+
+        await ImportAsync(factory, _tempDir, "clip.srt", """
+            1
+            00:00:01,000 --> 00:00:02,000
+            among us
+
+            """);
+
+        var summary = Assert.Single(await library.GetAllAsync());
+        Assert.True(summary.IsSelectedForSearch);
+    }
+
+    /// <summary>Milestone 13 exit criterion: "Selection survives restart" - a fresh LibraryService/DbContextFactory against the same file stands in for a restart.</summary>
+    [Fact]
+    public async Task SetSelectedAsync_PersistsAcrossANewServiceInstanceAgainstTheSameDatabase()
+    {
+        var setup = await TrySetUpAsync();
+        if (setup is null)
+        {
+            return;
+        }
+
+        var (library, factory) = setup.Value;
+
+        var mediaId = await ImportAsync(factory, _tempDir, "clip.srt", """
+            1
+            00:00:01,000 --> 00:00:02,000
+            among us
+
+            """);
+
+        await library.SetSelectedAsync(mediaId, false);
+
+        // A brand new LibraryService over the same on-disk database - nothing in-memory survives
+        // this, exactly like relaunching the app against its persisted database would.
+        var reopened = new LibraryService(factory);
+        var summary = Assert.Single(await reopened.GetAllAsync());
+        Assert.False(summary.IsSelectedForSearch);
+    }
+
+    [Fact]
+    public async Task GetSelectionSummaryAsync_ReportsOnlySelectedIdsAndTheTotal()
+    {
+        var setup = await TrySetUpAsync();
+        if (setup is null)
+        {
+            return;
+        }
+
+        var (library, factory) = setup.Value;
+
+        var keptId = await ImportAsync(factory, _tempDir, "a.srt", """
+            1
+            00:00:01,000 --> 00:00:02,000
+            among us
+
+            """);
+        var excludedId = await ImportAsync(factory, _tempDir, "b.srt", """
+            1
+            00:00:01,000 --> 00:00:02,000
+            a long bus
+
+            """);
+
+        await library.SetSelectedAsync(excludedId, false);
+
+        var (selectedIds, total) = await library.GetSelectionSummaryAsync();
+
+        Assert.Equal(2, total);
+        Assert.Equal([keptId], selectedIds);
+    }
+
+    [Fact]
+    public async Task SetAllSelectedAndInvertSelection_UpdateEveryMediaItem()
+    {
+        var setup = await TrySetUpAsync();
+        if (setup is null)
+        {
+            return;
+        }
+
+        var (library, factory) = setup.Value;
+
+        var idA = await ImportAsync(factory, _tempDir, "a.srt", """
+            1
+            00:00:01,000 --> 00:00:02,000
+            among us
+
+            """);
+        var idB = await ImportAsync(factory, _tempDir, "b.srt", """
+            1
+            00:00:01,000 --> 00:00:02,000
+            a long bus
+
+            """);
+
+        await library.SetAllSelectedAsync(false);
+        var (noneSelected, _) = await library.GetSelectionSummaryAsync();
+        Assert.Empty(noneSelected);
+
+        await library.InvertSelectionAsync();
+        var (allSelected, _) = await library.GetSelectionSummaryAsync();
+        Assert.Equal(new[] { idA, idB }.OrderBy(id => id), allSelected.OrderBy(id => id));
+    }
+
     public void Dispose()
     {
         try

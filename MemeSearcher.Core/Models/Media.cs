@@ -45,4 +45,12 @@ public class Media
     public long FileSize { get; set; }
     public DateTimeOffset LastModified { get; set; }
     public required string ContentHash { get; set; }
+
+    /// <summary>
+    /// Addendum §13: manual search scope must be a first-class, persistent feature - a media item
+    /// excluded from search stays excluded across restarts, not just for the current session.
+    /// Defaults to true (via the EF fluent default - see MemeSearcherDbContext) so importing new
+    /// media doesn't silently narrow the scope the user already had - only an explicit uncheck does.
+    /// </summary>
+    public bool IsSelectedForSearch { get; set; } = true;
 }

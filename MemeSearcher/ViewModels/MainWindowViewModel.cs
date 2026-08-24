@@ -1,5 +1,6 @@
 using System;
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
@@ -38,7 +39,28 @@ public partial class MainWindowViewModel : ViewModelBase
         Library = library;
         Settings = settings;
 
+        // Milestone 13: an open search tab's scope indicator must reflect a checkbox toggled in
+        // the (always-visible) library panel *before* the next search runs, not only after -
+        // otherwise "no matches" from an unnoticed scope filter is indistinguishable from a query
+        // that genuinely has none, which is exactly what the indicator exists to prevent. Owned
+        // here (not by SearchViewModel depending on LibraryViewModel directly) because this is the
+        // one place that already holds both sides without adding new coupling to either.
+        Library.PropertyChanged += OnLibrarySelectionChanged;
+
         NewSearchTab();
+    }
+
+    private void OnLibrarySelectionChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(LibraryViewModel.SelectionSummary))
+        {
+            return;
+        }
+
+        foreach (var tab in SearchTabs)
+        {
+            _ = tab.RefreshScopeSummaryAsync();
+        }
     }
 
     [RelayCommand]

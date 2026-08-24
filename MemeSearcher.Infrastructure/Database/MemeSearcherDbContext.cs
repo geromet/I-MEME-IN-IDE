@@ -22,6 +22,12 @@ public class MemeSearcherDbContext(DbContextOptions<MemeSearcherDbContext> optio
             entity.Property(m => m.Language).IsRequired();
             entity.Property(m => m.ContentHash).IsRequired();
 
+            // Milestone 13: an explicit fluent default (not just the C# property initializer) so
+            // the migration backfills existing rows to "selected" too - the property initializer
+            // only applies to newly-constructed-in-memory Media instances, not rows already in the
+            // database when this column was added.
+            entity.Property(m => m.IsSelectedForSearch).HasDefaultValue(true);
+
             // Recognizing "I already indexed this exact file" (addendum §3) relies on this.
             entity.HasIndex(m => m.ContentHash).IsUnique();
             entity.HasIndex(m => m.Path);

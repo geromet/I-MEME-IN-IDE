@@ -18,6 +18,7 @@ public class SearchHistoryService(IDbContextFactory<MemeSearcherDbContext> dbCon
         bool isComposite,
         string scopeDescription,
         int resultCount,
+        IReadOnlyCollection<Guid>? selectedMediaIds = null,
         CancellationToken cancellationToken = default)
     {
         await using var context = await dbContextFactory.CreateDbContextAsync(cancellationToken);
@@ -29,6 +30,7 @@ public class SearchHistoryService(IDbContextFactory<MemeSearcherDbContext> dbCon
             Language = language,
             IsComposite = isComposite,
             ScopeDescription = scopeDescription,
+            SelectedMediaIdsCsv = selectedMediaIds is { Count: > 0 } ids ? string.Join(',', ids) : null,
             ResultCount = resultCount,
             SearchedAt = DateTimeOffset.UtcNow,
         });

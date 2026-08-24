@@ -53,6 +53,22 @@ public partial class SearchViewModel(
     [ObservableProperty]
     private bool _isCompositeMode;
 
+    /// <summary>
+    /// Addendum §13: what a search will actually run against, shown next to the query so an
+    /// unnoticed scope filter is never mistaken for "genuinely no matches". Refreshed when this
+    /// tab is opened (SearchView's DataContextChanged) and after every search actually runs, so it
+    /// never drifts from what the last/next search will really see.
+    /// </summary>
+    [ObservableProperty]
+    private string _scopeSummary = "";
+
+    /// <summary>
+    /// Addendum §25: offered only after a scoped search comes back empty - searching the full
+    /// corpus by default would defeat the point of scoping at all.
+    /// </summary>
+    [ObservableProperty]
+    private bool _canWidenToFullCorpus;
+
     public ObservableCollection<SearchResultRowViewModel> Results { get; } = [];
 
     public ObservableCollection<CompositeSearchResultRowViewModel> CompositeResults { get; } = [];
@@ -60,10 +76,34 @@ public partial class SearchViewModel(
     public ObservableCollection<SearchHistoryEntry> RecentSearches { get; } = [];
 
     [RelayCommand(CanExecute = nameof(CanSearch))]
-    private async Task SearchAsync()
+    private async Task SearchAsync() => await RunSearchAsync(scopeOverride: null);
+
+    /// <summary>
+    /// Addendum §25: when a scoped search finds nothing, offer the full corpus rather than leaving
+    /// the user to guess whether "no matches" means the query is wrong or the scope excluded the
+    /// answer. Always widens to AllIndexedMedia, never a scope-restoring rerun.
+    /// </summary>
+    [RelayCommand]
+    private async Task SearchFullCorpusAsync() => await RunSearchAsync(scopeOverride: new SearchScope.AllIndexedMedia());
+
+    /// <summary>
+    /// Milestone 13: reproduces the scope the entry was actually run with (SearchHistoryEntry.
+    /// ToSearchScope), not whatever the library panel's checkboxes currently show - "History
+    /// entries round-trip their scope" per #13's exit criteria.
+    /// </summary>
+    [RelayCommand]
+    private async Task RerunSearchAsync(SearchHistoryEntry entry)
+    {
+        QueryText = entry.QueryText;
+        IsCompositeMode = entry.IsComposite;
+        await RunSearchAsync(entry.ToSearchScope());
+    }
+
+    private async Task RunSearchAsync(SearchScope? scopeOverride)
     {
         IsBusy = true;
         StatusMessage = "Searching...";
+        CanWidenToFullCorpus = false;
 
         try
         {
@@ -74,12 +114,21 @@ public partial class SearchViewModel(
                 QueryText, Language, ct => phonemizer.PhonemizeAsync(QueryText, Language, ct));
             QueryIpa = phonemized.Ipa;
 
+            var (scope, description, idsForHistory) = scopeOverride is null
+                ? await ResolveLiveScopeAsync()
+                : await DescribeExplicitScopeAsync(scopeOverride);
+            ScopeSummary = description;
+
             var resultCount = IsCompositeMode
-                ? await SearchCompositeAsync()
-                : await SearchSingleSourceAsync();
+                ? await SearchCompositeAsync(scope)
+                : await SearchSingleSourceAsync(scope);
+
+            // Only offer widening when scoping is the reason there's nothing to show - a search
+            // that already covers the whole corpus has nowhere wider to go.
+            CanWidenToFullCorpus = resultCount == 0 && scope is SearchScope.SelectedMedia;
 
             await searchHistoryService.RecordAsync(
-                QueryText, Language, IsCompositeMode, "All indexed media", resultCount);
+                QueryText, Language, IsCompositeMode, description, resultCount, idsForHistory);
             await LoadRecentSearchesAsync();
         }
         catch (Exception ex)
@@ -92,12 +141,41 @@ public partial class SearchViewModel(
         }
     }
 
-    [RelayCommand]
-    private async Task RerunSearchAsync(SearchHistoryEntry entry)
+    /// <summary>
+    /// The live scope from the library panel's checkboxes right now. Selecting everything reports
+    /// as AllIndexedMedia (not a same-length SelectedMedia list) so history and reruns resolve
+    /// against whatever is indexed *at rerun time* - matching the pre-#13 "All indexed media"
+    /// behaviour by default, and not silently freezing a scope the user never meant to narrow.
+    /// </summary>
+    private async Task<(SearchScope Scope, string Description, IReadOnlyCollection<Guid>? IdsForHistory)> ResolveLiveScopeAsync()
     {
-        QueryText = entry.QueryText;
-        IsCompositeMode = entry.IsComposite;
-        await SearchAsync();
+        var (selectedIds, total) = await libraryService.GetSelectionSummaryAsync();
+
+        if (selectedIds.Count == total)
+        {
+            return (new SearchScope.AllIndexedMedia(), "All indexed media", null);
+        }
+
+        return (new SearchScope.SelectedMedia(selectedIds), $"{selectedIds.Count} of {total} source(s)", selectedIds);
+    }
+
+    private async Task<(SearchScope Scope, string Description, IReadOnlyCollection<Guid>? IdsForHistory)> DescribeExplicitScopeAsync(SearchScope scope)
+    {
+        if (scope is SearchScope.SelectedMedia selected)
+        {
+            var (_, total) = await libraryService.GetSelectionSummaryAsync();
+            return (scope, $"{selected.MediaIds.Count} of {total} source(s)", selected.MediaIds);
+        }
+
+        return (scope, "All indexed media", null);
+    }
+
+    /// <summary>Refreshes the scope indicator without running a search - called when this tab is first shown, so it isn't blank until the user searches.</summary>
+    [RelayCommand]
+    public async Task RefreshScopeSummaryAsync()
+    {
+        var (_, description, _) = await ResolveLiveScopeAsync();
+        ScopeSummary = description;
     }
 
     [RelayCommand]
@@ -112,11 +190,11 @@ public partial class SearchViewModel(
         }
     }
 
-    private async Task<int> SearchSingleSourceAsync()
+    private async Task<int> SearchSingleSourceAsync(SearchScope scope)
     {
         CompositeResults.Clear();
 
-        var results = await searchService.SearchAsync(QueryText, Language, new SearchScope.AllIndexedMedia());
+        var results = await searchService.SearchAsync(QueryText, Language, scope);
         var mediaPaths = await libraryService.GetPathsAsync(results.Select(r => r.MediaId));
 
         Results.Clear();
@@ -136,11 +214,11 @@ public partial class SearchViewModel(
         return Results.Count;
     }
 
-    private async Task<int> SearchCompositeAsync()
+    private async Task<int> SearchCompositeAsync(SearchScope scope)
     {
         Results.Clear();
 
-        var results = await compositeSearchService.SearchAsync(QueryText, Language, new SearchScope.AllIndexedMedia());
+        var results = await compositeSearchService.SearchAsync(QueryText, Language, scope);
         var allMediaIds = results.SelectMany(r => r.Components.Select(c => c.MediaId)).Distinct().ToList();
         var mediaTitles = await libraryService.GetTitlesAsync(allMediaIds);
         var mediaPaths = await libraryService.GetPathsAsync(allMediaIds);

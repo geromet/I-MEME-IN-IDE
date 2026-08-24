@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
@@ -61,6 +62,10 @@ public partial class LibraryViewModel(
 
     public ObservableCollection<MediaRowViewModel> Items { get; } = [];
 
+    /// <summary>Milestone 13: "N of M selected" - the same live scope indicator SearchViewModel shows in the search bar, kept here too since this is where the checkboxes actually live.</summary>
+    [ObservableProperty]
+    private string _selectionSummary = "";
+
     [RelayCommand]
     public async Task LoadAsync()
     {
@@ -70,12 +75,20 @@ public partial class LibraryViewModel(
         {
             var summaries = await libraryService.GetAllAsync();
 
+            foreach (var row in Items)
+            {
+                row.PropertyChanged -= OnRowPropertyChanged;
+            }
+
             Items.Clear();
             foreach (var summary in summaries)
             {
-                Items.Add(new MediaRowViewModel(summary));
+                var row = new MediaRowViewModel(summary);
+                row.PropertyChanged += OnRowPropertyChanged;
+                Items.Add(row);
             }
 
+            UpdateSelectionSummary();
             StatusMessage = Items.Count > 0 ? $"{Items.Count} item(s) in the library." : "No media imported yet.";
         }
         catch (Exception ex)
@@ -86,6 +99,70 @@ public partial class LibraryViewModel(
         {
             IsBusy = false;
         }
+    }
+
+    /// <summary>
+    /// "All selected" rather than "11 of 11 selected" when nothing is excluded - matches
+    /// SearchViewModel.ScopeSummary's "All indexed media" wording for the same state, so the two
+    /// panels describing the same scope don't read as two different things.
+    /// </summary>
+    private void UpdateSelectionSummary()
+    {
+        if (Items.Count == 0)
+        {
+            SelectionSummary = "";
+            return;
+        }
+
+        var selected = Items.Count(i => i.IsSelected);
+        SelectionSummary = selected == Items.Count ? "All selected" : $"{selected} of {Items.Count} selected";
+    }
+
+    /// <summary>
+    /// Persists a checkbox toggle immediately (addendum §13: selection survives restart), then
+    /// updates the summary - in that order, not the reverse. MainWindowViewModel reacts to
+    /// SelectionSummary changing by having every open search tab re-read the selection from the
+    /// database (SearchViewModel.RefreshScopeSummaryAsync); raising that notification before the
+    /// write lands would let the re-read race the write and observe stale data. The outer call is
+    /// still fire-and-forget (matching how the rest of this codebase treats a UI-triggered write
+    /// that doesn't need to block the click that caused it) - only the write-then-notify order
+    /// inside it is guaranteed, not its timing relative to the caller.
+    /// </summary>
+    private void OnRowPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(MediaRowViewModel.IsSelected) || sender is not MediaRowViewModel row)
+        {
+            return;
+        }
+
+        _ = PersistSelectionThenUpdateSummaryAsync(row);
+    }
+
+    private async Task PersistSelectionThenUpdateSummaryAsync(MediaRowViewModel row)
+    {
+        await libraryService.SetSelectedAsync(row.Id, row.IsSelected);
+        UpdateSelectionSummary();
+    }
+
+    [RelayCommand]
+    private async Task SelectAllAsync()
+    {
+        await libraryService.SetAllSelectedAsync(true);
+        await LoadAsync();
+    }
+
+    [RelayCommand]
+    private async Task SelectNoneAsync()
+    {
+        await libraryService.SetAllSelectedAsync(false);
+        await LoadAsync();
+    }
+
+    [RelayCommand]
+    private async Task InvertSelectionAsync()
+    {
+        await libraryService.InvertSelectionAsync();
+        await LoadAsync();
     }
 
     [RelayCommand(CanExecute = nameof(CanImport))]

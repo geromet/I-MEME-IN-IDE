@@ -24,6 +24,12 @@ public partial class MediaRowViewModel(MediaSummary summary) : ObservableObject
     [ObservableProperty]
     private bool _isRealigning;
 
+    // Milestone 13: addendum §13's manual search scope. Two-way bound to a CheckBox; LibraryViewModel
+    // subscribes to this property's changes to persist and to keep the "N of M selected" summary
+    // current, rather than routing every checkbox click through an explicit command.
+    [ObservableProperty]
+    private bool _isSelected = summary.IsSelectedForSearch;
+
     // Milestone 3: duration is now actually populated (via ffprobe) instead of always zero.
     public string DurationDisplay { get; } = summary.Duration > TimeSpan.Zero
         ? summary.Duration.ToString(@"hh\:mm\:ss")

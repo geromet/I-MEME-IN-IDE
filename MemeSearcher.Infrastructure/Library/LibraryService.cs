@@ -53,8 +53,61 @@ public class LibraryService(IDbContextFactory<MemeSearcherDbContext> dbContextFa
                 m.CreatedAt,
                 segmentCounts.GetValueOrDefault(m.Id),
                 words?.WordCount ?? 0,
-                words?.PhonemizedCount ?? 0);
+                words?.PhonemizedCount ?? 0,
+                m.IsSelectedForSearch);
         }).ToList();
+    }
+
+    /// <summary>
+    /// Milestone 13: what a search actually runs against right now, and the total to compare it
+    /// against for the scope indicator ("3 of 47 sources") - one round trip serves both, since a
+    /// live search and a live indicator need the same answer at the same moment.
+    /// </summary>
+    public async Task<(IReadOnlyList<Guid> SelectedIds, int Total)> GetSelectionSummaryAsync(CancellationToken cancellationToken = default)
+    {
+        await using var context = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+
+        var ids = await context.Media.Select(m => new { m.Id, m.IsSelectedForSearch }).ToListAsync(cancellationToken);
+        return (ids.Where(m => m.IsSelectedForSearch).Select(m => m.Id).ToList(), ids.Count);
+    }
+
+    public async Task SetSelectedAsync(Guid mediaId, bool isSelected, CancellationToken cancellationToken = default)
+    {
+        await using var context = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+
+        var media = await context.Media.FindAsync([mediaId], cancellationToken);
+        if (media is null)
+        {
+            return;
+        }
+
+        media.IsSelectedForSearch = isSelected;
+        await context.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <summary>Select-all / select-none, and invert - addendum §13's affordances alongside per-row checkboxes.</summary>
+    public async Task SetAllSelectedAsync(bool isSelected, CancellationToken cancellationToken = default)
+    {
+        await using var context = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+
+        await foreach (var media in context.Media.AsAsyncEnumerable().WithCancellation(cancellationToken))
+        {
+            media.IsSelectedForSearch = isSelected;
+        }
+
+        await context.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task InvertSelectionAsync(CancellationToken cancellationToken = default)
+    {
+        await using var context = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+
+        await foreach (var media in context.Media.AsAsyncEnumerable().WithCancellation(cancellationToken))
+        {
+            media.IsSelectedForSearch = !media.IsSelectedForSearch;
+        }
+
+        await context.SaveChangesAsync(cancellationToken);
     }
 
     /// <summary>

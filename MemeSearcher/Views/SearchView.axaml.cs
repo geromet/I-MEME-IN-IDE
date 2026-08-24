@@ -13,6 +13,7 @@ public partial class SearchView : UserControl
             if (DataContext is SearchViewModel viewModel)
             {
                 _ = viewModel.LoadRecentSearchesAsync();
+                _ = viewModel.RefreshScopeSummaryAsync();
             }
         };
     }

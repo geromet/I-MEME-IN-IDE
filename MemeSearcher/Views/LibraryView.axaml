@@ -7,19 +7,27 @@
              x:Class="MemeSearcher.Views.LibraryView"
              x:DataType="vm:LibraryViewModel"
              x:Name="Root">
-    <Grid Margin="12" RowDefinitions="Auto,Auto,Auto,*">
+    <Grid Margin="12" RowDefinitions="Auto,Auto,Auto,Auto,*">
         <TextBlock Grid.Row="0" Classes="PanelHeader" Text="LIBRARY" Margin="0,0,0,8" />
 
-        <WrapPanel Grid.Row="1" Margin="0,0,0,8">
+        <WrapPanel Grid.Row="1" Margin="0,0,0,4">
             <Button Content="Refresh" Command="{Binding LoadCommand}" Margin="0,0,6,6" />
             <Button Content="Add Media..." Command="{Binding ImportCommand}" Margin="0,0,6,6" />
+        </WrapPanel>
+
+        <!-- Addendum §13: manual search scope, per-source checkboxes below plus these affordances. -->
+        <WrapPanel Grid.Row="2" Margin="0,0,0,4">
+            <Button Content="Select All" Command="{Binding SelectAllCommand}" Margin="0,0,6,6" />
+            <Button Content="Select None" Command="{Binding SelectNoneCommand}" Margin="0,0,6,6" />
+            <Button Content="Invert" Command="{Binding InvertSelectionCommand}" Margin="0,0,6,6" />
+            <TextBlock Classes="HeaderLabel" Text="{Binding SelectionSummary}" Margin="0,0,0,6" />
         </WrapPanel>
 
         <!-- Failures get a bordered, wrapping, selectable block; routine status stays a quiet line.
              External tools produce long, specific messages ("acoustic model 'x' is not installed
              (mfa model download acoustic x)") and those are only useful if they can be read in
              full and copied. -->
-        <Border Grid.Row="2"
+        <Border Grid.Row="3"
                 Margin="0,0,0,12"
                 Padding="10"
                 CornerRadius="4"
@@ -28,19 +36,22 @@
             <SelectableTextBlock Text="{Binding StatusMessage}" TextWrapping="Wrap" Foreground="{StaticResource TextPrimary}" />
         </Border>
 
-        <TextBlock Grid.Row="2"
+        <TextBlock Grid.Row="3"
                    Classes="FieldLabel"
                    Margin="0,0,0,12"
                    Text="{Binding StatusMessage}"
                    TextWrapping="Wrap"
                    IsVisible="{Binding !IsStatusError}" />
 
-        <ListBox Grid.Row="3" ItemsSource="{Binding Items}">
+        <ListBox Grid.Row="4" ItemsSource="{Binding Items}">
             <ListBox.ItemTemplate>
                 <DataTemplate x:DataType="vm:MediaRowViewModel">
                     <Border Padding="10" Margin="0,3" BorderThickness="1" BorderBrush="{StaticResource BorderMid}" CornerRadius="4">
                         <StackPanel Spacing="4">
-                            <TextBlock Text="{Binding Title}" FontSize="14" FontWeight="Bold" Foreground="{StaticResource TextPrimary}" TextWrapping="Wrap" />
+                            <CheckBox IsChecked="{Binding IsSelected}"
+                                      ToolTip.Tip="Included in search when checked (addendum §13).">
+                                <TextBlock Text="{Binding Title}" FontSize="14" FontWeight="Bold" Foreground="{StaticResource TextPrimary}" TextWrapping="Wrap" />
+                            </CheckBox>
                             <TextBlock Classes="FieldLabel" Text="{Binding Path}" FontFamily="monospace" TextTrimming="CharacterEllipsis" />
                             <WrapPanel>
                                 <TextBlock Classes="HeaderLabel" Margin="0,0,8,2" Text="{Binding Language}" />

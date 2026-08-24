@@ -94,6 +94,59 @@ public class MainWindowViewModelTests : IDisposable
         Assert.Same(tab, viewModel.ActiveSearchTab);
     }
 
+    /// <summary>
+    /// Milestone 13: the scope indicator must catch up *before* the next search runs, not only
+    /// after - otherwise "no matches" from an unnoticed scope filter is indistinguishable from a
+    /// query that genuinely has none. Exercises the real production path (a checkbox toggle raises
+    /// MediaRowViewModel.IsSelected's PropertyChanged, which LibraryViewModel turns into its own
+    /// SelectionSummary change, which MainWindowViewModel fans out to every open tab) rather than
+    /// calling RefreshScopeSummaryAsync directly, since that would prove the method works without
+    /// proving anything actually calls it when a checkbox changes.
+    /// </summary>
+    [Fact]
+    public async Task TogglingLibrarySelection_RefreshesAnAlreadyOpenTabsScopeSummaryWithoutSearching()
+    {
+        var setup = await TrySetUpAsync();
+        if (setup is null)
+        {
+            return;
+        }
+
+        var (viewModel, dbContextFactory, phonemizer) = setup.Value;
+
+        await ImportAsync(dbContextFactory, phonemizer, _tempDir, "a.srt", """
+            1
+            00:00:01,000 --> 00:00:02,000
+            hello world
+
+            """);
+        await ImportAsync(dbContextFactory, phonemizer, _tempDir, "b.srt", """
+            1
+            00:00:10,000 --> 00:00:11,000
+            banana split
+
+            """);
+
+        await viewModel.Library.LoadAsync();
+
+        var tab = viewModel.ActiveSearchTab!;
+        await tab.RefreshScopeSummaryAsync();
+        Assert.Equal("All indexed media", tab.ScopeSummary);
+
+        // No search runs on this tab - only a checkbox toggle in the library panel.
+        viewModel.Library.Items[0].IsSelected = false;
+
+        // MainWindowViewModel's reaction is fire-and-forget (matching the rest of this codebase's
+        // convention for a UI-triggered write/refresh) - poll briefly rather than assert
+        // immediately or rely on a fixed sleep.
+        for (var i = 0; i < 20 && tab.ScopeSummary != "1 of 2 source(s)"; i++)
+        {
+            await Task.Delay(10);
+        }
+
+        Assert.Equal("1 of 2 source(s)", tab.ScopeSummary);
+    }
+
     [Fact]
     public async Task TwoTabsWithDifferentSearches_HoldIndependentResultsAndSwitchingDoesNotRerun()
     {
