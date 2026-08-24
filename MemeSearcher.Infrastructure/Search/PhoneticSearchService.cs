@@ -317,6 +317,7 @@ public class PhoneticSearchService(
         // free pass) and show up as spurious Match steps here - filtered out, since they're a
         // structural device the matcher uses internally, not a phoneme correspondence a user
         // should see (#15).
+        var queryIndexMap = QueryCoverage.BuildIndexMap(queryTokens);
         var alignmentSteps = match.AlignmentSteps
             .Where(s =>
                 (s.QueryIndex is not int qi || !queryTokens[qi].IsBoundary) &&
@@ -324,8 +325,18 @@ public class PhoneticSearchService(
             .Select(s => new QueryAlignmentStep(
                 s.Op,
                 s.QueryIndex is int qi2 ? queryTokens[qi2].Symbol : null,
-                s.CandidateIndex is int ci2 ? candidateStream[ci2].Token.Symbol : null))
+                s.CandidateIndex is int ci2 ? candidateStream[ci2].Token.Symbol : null,
+                s.QueryIndex is int qi3 ? queryIndexMap[qi3] : null))
             .ToList();
+
+        // #25: the envelope of positions this match actually corresponds to (Match/Substitute),
+        // as opposed to ones the query asked for that this candidate lacks entirely (QueryExtra) -
+        // the coverage a result-row strip needs to show, since the matcher aligns the whole query
+        // against every candidate rather than only the part that's actually present.
+        var coveredIndices = alignmentSteps
+            .Where(s => s.Op is AlignmentOp.Match or AlignmentOp.Substitute)
+            .Select(s => s.QueryIndex!.Value);
+        var (queryStart, queryEnd) = QueryCoverage.ComputeSpan(coveredIndices);
 
         var score = queryPhonemeCount > 0 && !double.IsPositiveInfinity(options.SubstitutionMaxCost)
             ? Math.Clamp(1 - match.Cost / (queryPhonemeCount * options.SubstitutionMaxCost), 0, 1)
@@ -333,7 +344,7 @@ public class PhoneticSearchService(
 
         return new SearchResult(
             mediaId, startSeconds, endSeconds, sourceText, ipa, matchPhonemes, score, queryPhonemes,
-            matchedPhoneDetails, alignmentSteps);
+            matchedPhoneDetails, alignmentSteps, queryStart, queryEnd);
     }
 
 }

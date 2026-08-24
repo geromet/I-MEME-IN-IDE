@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using MemeSearcher.Core.Interfaces;
+using MemeSearcher.Core.Search;
 
 namespace MemeSearcher.ViewModels;
 
@@ -41,12 +42,26 @@ public partial class InspectorViewModel(IMediaPlayerLauncher playerLauncher) : V
 
     public ObservableCollection<PhoneBlockViewModel> PhoneBlocks { get; } = [];
 
-    public ObservableCollection<AlignmentStepDisplayViewModel> AlignmentSteps { get; } = [];
+    /// <summary>#25: the same shared coverage strip the results list shows per row, rendered larger here - replaces the old flat WrapPanel-of-chips rendering for query positions, per the issue's instruction that #15 and #25 share one phone-strip control.</summary>
+    [ObservableProperty]
+    private PhoneCoverageStripViewModel _coverageStrip = new([]);
+
+    [ObservableProperty]
+    private bool _hasExtraPhonemes;
+
+    /// <summary>
+    /// #25: phones the match has that the query never asked for (AlignmentOp.CandidateExtra) - the
+    /// one alignment op a query-position-indexed strip structurally cannot place, since it consumes
+    /// no query position at all. Kept as its own small display rather than dropped, since it's a
+    /// distinct quality signal #15 already surfaced ("+t" chips) and the exit criterion for #25 is
+    /// "distinguishing exact from substituted phones", not "replace #15's correspondence display".
+    /// </summary>
+    public ObservableCollection<string> ExtraPhonemes { get; } = [];
 
     public void Show(SearchResultRowViewModel? result)
     {
         PhoneBlocks.Clear();
-        AlignmentSteps.Clear();
+        ExtraPhonemes.Clear();
         SeekStatus = "";
 
         if (result is null)
@@ -56,6 +71,8 @@ public partial class InspectorViewModel(IMediaPlayerLauncher playerLauncher) : V
             AlignmentSummary = "";
             MediaPath = null;
             HasAlignmentSteps = false;
+            HasExtraPhonemes = false;
+            CoverageStrip = new PhoneCoverageStripViewModel([]);
             return;
         }
 
@@ -68,12 +85,18 @@ public partial class InspectorViewModel(IMediaPlayerLauncher playerLauncher) : V
             PhoneBlocks.Add(new PhoneBlockViewModel(phone));
         }
 
+        CoverageStrip = result.CoverageStrip;
+        HasAlignmentSteps = result.AlignmentSteps.Count > 0;
+
         foreach (var step in result.AlignmentSteps)
         {
-            AlignmentSteps.Add(new AlignmentStepDisplayViewModel(step));
+            if (step.Op == AlignmentOp.CandidateExtra)
+            {
+                ExtraPhonemes.Add($"+{step.MatchSymbol}");
+            }
         }
 
-        HasAlignmentSteps = AlignmentSteps.Count > 0;
+        HasExtraPhonemes = ExtraPhonemes.Count > 0;
 
         AlignmentSummary = PhoneBlocks.Count == 0
             ? "No phone timing available for this match."

@@ -276,8 +276,9 @@ public class CompositeSearchService(
             return null;
         }
 
+        var queryIndexMap = QueryCoverage.BuildIndexMap(queryTokens);
         var components = componentGroups
-            .Select(group => BuildComponent(group, match, candidateStream, queryTokens, options))
+            .Select(group => BuildComponent(group, match, candidateStream, queryTokens, queryIndexMap, options))
             .ToList();
 
         var overallScore = ScoreOf(match.Cost, queryPhonemeCount, options);
@@ -318,6 +319,7 @@ public class CompositeSearchService(
         PhoneticMatchSpan match,
         List<PhoneStreamEntry> candidateStream,
         IReadOnlyList<PhoneToken> queryTokens,
+        int[] queryIndexMap,
         PhoneticSearchOptions options)
     {
         var mediaId = group[0].Entry.MediaId!.Value;
@@ -336,19 +338,13 @@ public class CompositeSearchService(
             .Where(c => c.CandidateIndex >= minIndex && c.CandidateIndex <= maxIndex)
             .ToList();
 
-        int queryStart, queryEnd;
-        if (correspondencesInRange.Count > 0)
-        {
-            queryStart = correspondencesInRange.Min(c => c.QueryIndex);
-            queryEnd = correspondencesInRange.Max(c => c.QueryIndex) + 1;
-        }
-        else
-        {
-            // Purely inserted candidate phonemes with no direct query correspondence (rare) -
-            // attribute them to an empty slice rather than guessing.
-            queryStart = 0;
-            queryEnd = 0;
-        }
+        // #25: mapped through queryIndexMap into the same boundary-filtered index space
+        // CompositeSearchResult.QueryPhonemes uses - match.Correspondences is in raw queryTokens
+        // space (boundary tokens included), which only happens to equal the filtered space for a
+        // single-word query. A multi-word query previously reported QueryStart/QueryEnd shifted by
+        // however many word-boundary tokens preceded the match - a real, silent bug this fixes.
+        var (queryStart, queryEnd) = QueryCoverage.ComputeSpan(
+            correspondencesInRange.Select(c => queryIndexMap[c.QueryIndex]));
 
         var componentScore = correspondencesInRange.Count > 0
             ? ScoreOf(

@@ -100,6 +100,61 @@ public class CompositeSearchServiceTests : IDisposable
     }
 
     /// <summary>
+    /// #25: QueryStart/QueryEnd must index into the same boundary-filtered space as
+    /// CompositeSearchResult.QueryPhonemes, not the raw PhoneToken space match.Correspondences
+    /// comes in - which includes a boundary token between every word. "superman" (one word) can't
+    /// expose that distinction since there's no boundary in its query tokens at all; a two-word
+    /// query is required to prove the mapping, and previously wasn't tested at this level.
+    /// </summary>
+    [Fact]
+    public async Task SearchAsync_MultiWordQuery_ReportsComponentSpansInFilteredQueryPhonemeSpace()
+    {
+        var setup = await TrySetUpAsync();
+        if (setup is null)
+        {
+            return;
+        }
+
+        var (service, phonemizer, factory) = setup.Value;
+
+        var mediaA = await ImportAsync(factory, phonemizer, _tempDir, "a.srt", """
+            1
+            00:00:10,000 --> 00:00:11,000
+            super
+
+            """);
+        var mediaB = await ImportAsync(factory, phonemizer, _tempDir, "b.srt", """
+            1
+            00:00:20,000 --> 00:00:21,000
+            man
+
+            """);
+
+        var results = await service.SearchAsync("super man", "en-US", new SearchScope.AllIndexedMedia());
+
+        Assert.NotEmpty(results);
+        var best = results[0];
+        Assert.Equal(2, best.Components.Count);
+        Assert.Equal(mediaA, best.Components[0].MediaId);
+        Assert.Equal(mediaB, best.Components[1].MediaId);
+
+        // Every component's span must fit inside [0, QueryPhonemes.Count] - the bug this fixes
+        // reported the second word's span shifted past the end of the list entirely (by the one
+        // boundary token between "super" and "man"), which this range check alone would have caught.
+        Assert.All(best.Components, c =>
+        {
+            Assert.InRange(c.QueryStart, 0, best.QueryPhonemes.Count);
+            Assert.InRange(c.QueryEnd, 0, best.QueryPhonemes.Count);
+        });
+
+        // The two components jointly cover the whole query with no gap and no overlap: "super"
+        // covers a prefix, "man" covers the rest, meeting exactly at the boundary-filtered midpoint.
+        Assert.Equal(0, best.Components[0].QueryStart);
+        Assert.Equal(best.Components[1].QueryStart, best.Components[0].QueryEnd);
+        Assert.Equal(best.QueryPhonemes.Count, best.Components[1].QueryEnd);
+    }
+
+    /// <summary>
     /// Milestone 10 / issue #4: the existing "AssemblesAResultFromTwoDifferentMediaFiles" test above
     /// imports "super" before "man" - the same order the query needs, so fixed-order concatenation
     /// already satisfies it and proves nothing about any-to-any stitching. Here the import order is

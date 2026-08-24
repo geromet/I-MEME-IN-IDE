@@ -83,6 +83,13 @@ public class PhoneticSearchServiceTests : IDisposable
         Assert.Equal("a long bus", result.SourceText);
         Assert.True(result.Score > 0.5, $"expected a reasonably high score, got {result.Score}");
         Assert.Equal(10.0, result.StartSeconds!.Value, 1);
+
+        // #25: "among us" is a two-word query (one boundary token between the words), so its
+        // QueryStart/QueryEnd exercises the boundary-filtered index mapping, not just the
+        // single-word case a one-word query would trivially satisfy. A full, near-exact match
+        // covers the entire query.
+        Assert.Equal(0, result.QueryStart);
+        Assert.Equal(result.QueryPhonemes.Count, result.QueryEnd);
     }
 
     [Fact]

@@ -3,6 +3,7 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:vm="using:MemeSearcher.ViewModels"
+             xmlns:views="using:MemeSearcher.Views"
              mc:Ignorable="d" d:DesignWidth="280" d:DesignHeight="550"
              x:Class="MemeSearcher.Views.InspectorView"
              x:DataType="vm:InspectorViewModel"
@@ -44,21 +45,32 @@
                 </StackPanel>
 
                 <StackPanel IsVisible="{Binding HasAlignmentSteps}">
-                    <TextBlock Classes="HeaderLabel" Text="QUERY CORRESPONDENCE" Margin="0,0,0,4" />
-                    <ItemsControl ItemsSource="{Binding AlignmentSteps}">
-                        <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate>
-                                <WrapPanel Orientation="Horizontal" />
-                            </ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate x:DataType="vm:AlignmentStepDisplayViewModel">
-                                <Border Classes="AlignmentChip" Classes.Problem="{Binding IsProblem}">
-                                    <TextBlock Text="{Binding Display}" />
-                                </Border>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
+                    <!-- #25: the same coverage-strip control the results list uses per row, larger
+                         here - shared per the issue's instruction rather than this panel growing
+                         its own separate chip rendering of the same alignment data. -->
+                    <TextBlock Classes="HeaderLabel" Text="QUERY COVERAGE" Margin="0,0,0,4" />
+                    <views:PhoneCoverageStripView DataContext="{Binding CoverageStrip}" CellWidth="26" CellHeight="26" CellFontSize="13" />
+
+                    <!-- #25: phones the match has that the query never asked for - a
+                         query-indexed strip can't place these (they consume no query position),
+                         so they keep #15's original chip rendering rather than being lost. -->
+                    <StackPanel IsVisible="{Binding HasExtraPhonemes}" Margin="0,8,0,0">
+                        <TextBlock Classes="HeaderLabel" Text="EXTRA IN MATCH (not in query)" Margin="0,0,0,4" />
+                        <ItemsControl ItemsSource="{Binding ExtraPhonemes}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <WrapPanel Orientation="Horizontal" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Classes="AlignmentChip Problem">
+                                        <TextBlock Text="{Binding}" />
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
                 </StackPanel>
             </StackPanel>
         </ScrollViewer>

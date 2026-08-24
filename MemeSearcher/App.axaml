@@ -206,6 +206,35 @@
                 <Setter Property="FontSize" Value="12" />
             </Style>
 
+            <!-- Coverage strip cells (#25): one per query phoneme, colored by whether this match
+                 covers it exactly, covers it via a substitution, has a hole inside its covered
+                 span, or doesn't cover it at all - see PhoneCoverageState's own doc comment for why
+                 these are kept as four distinct states rather than a flattened covered/uncovered. -->
+            <Style Selector="Border.CoverageCell">
+                <Setter Property="BorderThickness" Value="0 0 1 0" />
+                <Setter Property="BorderBrush" Value="{StaticResource BgBase}" />
+                <Setter Property="Background" Value="{StaticResource BgInput}" />
+            </Style>
+            <Style Selector="Border.CoverageCell TextBlock">
+                <Setter Property="FontFamily" Value="monospace" />
+                <Setter Property="Foreground" Value="{StaticResource TextMuted}" />
+            </Style>
+            <Style Selector="Border.CoverageCell.Match">
+                <Setter Property="Background" Value="{StaticResource StatusSuccess}" />
+            </Style>
+            <Style Selector="Border.CoverageCell.Match TextBlock">
+                <Setter Property="Foreground" Value="{StaticResource TextPrimary}" />
+            </Style>
+            <Style Selector="Border.CoverageCell.Substitute">
+                <Setter Property="Background" Value="{StaticResource StatusWarning}" />
+            </Style>
+            <Style Selector="Border.CoverageCell.Substitute TextBlock">
+                <Setter Property="Foreground" Value="{StaticResource TextPrimary}" />
+            </Style>
+            <Style Selector="Border.CoverageCell.Gap">
+                <Setter Property="Background" Value="{StaticResource StatusErrorMuted}" />
+            </Style>
+
             <!-- ══ TABS ══ -->
 
             <Style Selector="TabControl">

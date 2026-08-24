@@ -18,7 +18,12 @@ public class InspectorViewModelTests
     private static FFmpegClipExtractor MakeClipExtractor() => new(new FFmpegToolLocator());
 
     private static SearchResultRowViewModel MakeRow(
-        IReadOnlyList<MatchedPhone> matchedPhoneDetails, IReadOnlyList<QueryAlignmentStep>? alignmentSteps = null, string? mediaPath = "/media/clip.mp4")
+        IReadOnlyList<MatchedPhone> matchedPhoneDetails,
+        IReadOnlyList<QueryAlignmentStep>? alignmentSteps = null,
+        string? mediaPath = "/media/clip.mp4",
+        IReadOnlyList<string>? queryPhonemes = null,
+        int queryStart = 0,
+        int queryEnd = 0)
     {
         var result = new SearchResult(
             MediaId: Guid.NewGuid(),
@@ -27,10 +32,12 @@ public class InspectorViewModelTests
             SourceText: "hello",
             Ipa: "hɛloʊ",
             Phonemes: matchedPhoneDetails.Select(p => p.Symbol).ToList(),
-            QueryPhonemes: matchedPhoneDetails.Select(p => p.Symbol).ToList(),
+            QueryPhonemes: queryPhonemes ?? matchedPhoneDetails.Select(p => p.Symbol).ToList(),
             Score: 0.9,
             MatchedPhoneDetails: matchedPhoneDetails,
-            AlignmentSteps: alignmentSteps ?? []);
+            AlignmentSteps: alignmentSteps ?? [],
+            QueryStart: queryStart,
+            QueryEnd: queryEnd);
 
         return new SearchResultRowViewModel(
             result, new FakeMediaPlayerLauncher(), new FakeClipboardService(), MakeClipExtractor(), new FakeFilePickerService())
@@ -98,27 +105,57 @@ public class InspectorViewModelTests
         Assert.Contains("Partially aligned", inspector.AlignmentSummary);
     }
 
-    /// <summary>Exit criterion: "substitution/insertion positions visible against the query."</summary>
+    /// <summary>Exit criterion: "substitution/insertion positions visible against the query" - now via the shared coverage strip (#25) rather than a flat WrapPanel of chips.</summary>
     [Fact]
     public void Show_AlignmentSteps_SurfacesSubstitutionsAndInsertions()
     {
         var row = MakeRow(
             [new MatchedPhone("h", 1.0, 1.1, true), new MatchedPhone("ɛ", 1.1, 1.3, true)],
             [
-                new QueryAlignmentStep(AlignmentOp.Match, "h", "h"),
-                new QueryAlignmentStep(AlignmentOp.Substitute, "ə", "ɛ"),
-                new QueryAlignmentStep(AlignmentOp.QueryExtra, "z", null),
-            ]);
+                new QueryAlignmentStep(AlignmentOp.Match, "h", "h", QueryIndex: 0),
+                new QueryAlignmentStep(AlignmentOp.Substitute, "ə", "ɛ", QueryIndex: 1),
+                // Outside the covered span - the query asked for "z" and this candidate has
+                // nothing corresponding to it at all, not even a substitution.
+                new QueryAlignmentStep(AlignmentOp.QueryExtra, "z", null, QueryIndex: 2),
+            ],
+            queryPhonemes: ["h", "ə", "z"],
+            queryStart: 0,
+            queryEnd: 2);
 
         var inspector = new InspectorViewModel(new FakeMediaPlayerLauncher());
         inspector.Show(row);
 
         Assert.True(inspector.HasAlignmentSteps);
-        Assert.Equal(3, inspector.AlignmentSteps.Count);
-        Assert.False(inspector.AlignmentSteps[0].IsProblem);
-        Assert.True(inspector.AlignmentSteps[1].IsProblem);
-        Assert.Equal("ə→ɛ", inspector.AlignmentSteps[1].Display);
-        Assert.True(inspector.AlignmentSteps[2].IsProblem);
+        var cells = inspector.CoverageStrip.Cells;
+        Assert.Equal(3, cells.Count);
+        Assert.True(cells[0].IsMatch);
+        Assert.True(cells[1].IsSubstitute);
+        Assert.True(cells[2].IsOutsideSpan);
+    }
+
+    /// <summary>
+    /// #25 review finding: a query-indexed coverage strip cannot place AlignmentOp.CandidateExtra
+    /// at all (it consumes no query position) - this phone-has-more-than-the-query signal must
+    /// keep surfacing somewhere, or it silently disappears from the app entirely.
+    /// </summary>
+    [Fact]
+    public void Show_CandidateExtraStep_StillSurfacesAsAnExtraPhoneme()
+    {
+        var row = MakeRow(
+            [new MatchedPhone("h", 1.0, 1.1, true)],
+            [
+                new QueryAlignmentStep(AlignmentOp.Match, "h", "h", QueryIndex: 0),
+                new QueryAlignmentStep(AlignmentOp.CandidateExtra, null, "t"),
+            ],
+            queryPhonemes: ["h"],
+            queryStart: 0,
+            queryEnd: 1);
+
+        var inspector = new InspectorViewModel(new FakeMediaPlayerLauncher());
+        inspector.Show(row);
+
+        Assert.True(inspector.HasExtraPhonemes);
+        Assert.Equal("+t", Assert.Single(inspector.ExtraPhonemes));
     }
 
     /// <summary>Click-to-seek: extends the existing external-player launch to a specific phone's own start time.</summary>

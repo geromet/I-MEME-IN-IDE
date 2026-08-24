@@ -13,9 +13,12 @@ public record MatchedPhone(string Symbol, double? StartSeconds, double? EndSecon
 /// One step of the query-to-match alignment, resolved to symbols rather than raw indices so the
 /// inspector doesn't need to reach back into either token list (#15). QuerySymbol is null for a
 /// CandidateExtra step (the match has a phoneme the query didn't ask for); MatchSymbol is null for
-/// a QueryExtra step (the query asked for a phoneme this match doesn't have).
+/// a QueryExtra step (the query asked for a phoneme this match doesn't have). QueryIndex (#25) is
+/// this step's position in the boundary-filtered QueryPhonemes list - null only for CandidateExtra,
+/// the one op that doesn't consume a query position at all - and is what lets a coverage strip
+/// place each step against a fixed query ruler instead of just flowing left to right.
 /// </summary>
-public record QueryAlignmentStep(AlignmentOp Op, string? QuerySymbol, string? MatchSymbol);
+public record QueryAlignmentStep(AlignmentOp Op, string? QuerySymbol, string? MatchSymbol, int? QueryIndex = null);
 
 /// <summary>
 /// A single-source match. Adds the query-side context (the phonemes it was searched against) and
@@ -23,7 +26,12 @@ public record QueryAlignmentStep(AlignmentOp Op, string? QuerySymbol, string? Ma
 /// composite results (#17) - Phonemes (inherited) is the matched phonemes, not the query's;
 /// QueryPhonemes is this result's own copy since a single-source result stands alone (composite
 /// hoists the same data to CompositeSearchResult's top level instead, since every component of one
-/// composite result was searched against the same query).
+/// composite result was searched against the same query). QueryStart/QueryEnd (#25) is the
+/// [Start, End) envelope, in QueryPhonemes index space, this match actually corresponds to - the
+/// matcher aligns the *whole* query against every candidate (free start position, not partial
+/// consumption), so a query phoneme outside this range is one AlignmentSteps marks QueryExtra: the
+/// query asked for it and this candidate simply doesn't have it, as opposed to one inside the range
+/// that's genuinely a Match or Substitute.
 /// </summary>
 public record SearchResult(
     Guid MediaId,
@@ -35,7 +43,9 @@ public record SearchResult(
     double Score,
     IReadOnlyList<string> QueryPhonemes,
     IReadOnlyList<MatchedPhone>? MatchedPhoneDetails = null,
-    IReadOnlyList<QueryAlignmentStep>? AlignmentSteps = null)
+    IReadOnlyList<QueryAlignmentStep>? AlignmentSteps = null,
+    int QueryStart = 0,
+    int QueryEnd = 0)
     : MatchComponent(MediaId, StartSeconds, EndSeconds, SourceText, Ipa, Phonemes, Score)
 {
     public IReadOnlyList<MatchedPhone> MatchedPhoneDetails { get; init; } = MatchedPhoneDetails ?? [];

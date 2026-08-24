@@ -4,6 +4,7 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:vm="using:MemeSearcher.ViewModels"
              xmlns:models="using:MemeSearcher.Core.Models"
+             xmlns:views="using:MemeSearcher.Views"
              mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="550"
              x:Class="MemeSearcher.Views.SearchView"
              x:DataType="vm:SearchViewModel"
@@ -67,6 +68,15 @@
                             </StackPanel>
                             <TextBlock Text="{Binding SourceText}" FontSize="15" Foreground="{StaticResource TextPrimary}" />
                             <TextBlock Text="{Binding Ipa}" FontFamily="monospace" Foreground="{StaticResource TextSecondary}" />
+
+                            <!-- #25: which part of the query this hit covers, and how - the
+                                 "moeten" case (five short hits looking like unrelated words) reads
+                                 correctly once each row shows the slice of the query it accounts
+                                 for instead of just an opaque score. -->
+                            <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,2,0,0">
+                                <views:PhoneCoverageStripView DataContext="{Binding CoverageStrip}" CellWidth="14" CellHeight="14" CellFontSize="8" />
+                                <TextBlock Classes="FieldLabel" Text="{Binding CoverageDisplay}" VerticalAlignment="Center" />
+                            </StackPanel>
 
                             <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,4,0,0">
                                 <Button Content="▶ Play" Command="{Binding PlayCommand}" />

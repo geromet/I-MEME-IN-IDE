@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -47,6 +48,23 @@ public partial class SearchResultRowViewModel : ObservableObject
     /// <summary>Milestone 15 (#15): the query-to-match alignment, for the inspector's correspondence display.</summary>
     public IReadOnlyList<QueryAlignmentStep> AlignmentSteps { get; }
 
+    /// <summary>
+    /// #25: one cell per query phoneme, shared between this row's compact strip and the Inspector's
+    /// larger one - built once here so both render identical coverage for the same result.
+    /// </summary>
+    public PhoneCoverageStripViewModel CoverageStrip { get; }
+
+    /// <summary>
+    /// #25: the fraction of the query this match genuinely covers - positions actually aligned
+    /// (Match or Substitute), not the width of [QueryStart, QueryEnd), since a covered span can
+    /// contain interior gaps (QueryExtra) that this fraction is meant to count against, not include.
+    /// A separate axis from Score: "matched a little, well" and "matched a lot, roughly" can carry
+    /// similar scores while covering very different amounts of the query.
+    /// </summary>
+    public double CoverageFraction { get; }
+
+    public string CoverageDisplay => $"{CoverageFraction:P0} covered";
+
     // Resolved after construction (batched across all results by SearchViewModel), so the
     // Play/Export buttons' enabled state has to react to it arriving.
     [ObservableProperty]
@@ -83,6 +101,12 @@ public partial class SearchResultRowViewModel : ObservableObject
         PhonemesDisplay = string.Join(' ', result.Phonemes);
         MatchedPhoneDetails = result.MatchedPhoneDetails;
         AlignmentSteps = result.AlignmentSteps;
+
+        var coverageCells = PhoneCoverageStripBuilder.Build(result.QueryPhonemes, result.AlignmentSteps, result.QueryStart, result.QueryEnd);
+        CoverageStrip = new PhoneCoverageStripViewModel(coverageCells);
+        CoverageFraction = result.QueryPhonemes.Count > 0
+            ? coverageCells.Count(c => c.IsMatch || c.IsSubstitute) / (double)result.QueryPhonemes.Count
+            : 0;
     }
 
     [RelayCommand(CanExecute = nameof(CanPlay))]

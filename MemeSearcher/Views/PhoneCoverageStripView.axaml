@@ -1,0 +1,35 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:MemeSearcher.ViewModels"
+             mc:Ignorable="d" d:DesignWidth="260" d:DesignHeight="26"
+             x:Class="MemeSearcher.Views.PhoneCoverageStripView"
+             x:DataType="vm:PhoneCoverageStripViewModel"
+             x:Name="Root">
+    <!-- #25: one fixed-width cell per query phoneme, positioned by query index so every result's
+         strip lines up against the same ruler - shared between the results list (compact) and the
+         Inspector (larger), per the issue's own "share the phone-strip control" instruction. Sizing
+         is driven entirely by the CellWidth/CellHeight the host sets, not by anything in here. -->
+    <ItemsControl ItemsSource="{Binding Cells}">
+        <ItemsControl.ItemsPanel>
+            <ItemsPanelTemplate>
+                <WrapPanel Orientation="Horizontal" />
+            </ItemsPanelTemplate>
+        </ItemsControl.ItemsPanel>
+        <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:PhoneCoverageCellViewModel">
+                <Border Classes="CoverageCell"
+                        Classes.Match="{Binding IsMatch}"
+                        Classes.Substitute="{Binding IsSubstitute}"
+                        Classes.Gap="{Binding IsGap}"
+                        Classes.OutsideSpan="{Binding IsOutsideSpan}"
+                        Width="{Binding #Root.CellWidth}" Height="{Binding #Root.CellHeight}"
+                        ToolTip.Tip="{Binding Symbol}">
+                    <TextBlock Text="{Binding Symbol}" HorizontalAlignment="Center" VerticalAlignment="Center"
+                               FontSize="{Binding #Root.CellFontSize}" TextTrimming="CharacterEllipsis" />
+                </Border>
+            </DataTemplate>
+        </ItemsControl.ItemTemplate>
+    </ItemsControl>
+</UserControl>
