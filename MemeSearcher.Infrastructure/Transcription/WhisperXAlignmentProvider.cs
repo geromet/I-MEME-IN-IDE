@@ -2,6 +2,7 @@ using System.Diagnostics;
 using MemeSearcher.Core.Interfaces;
 using MemeSearcher.Core.Phonetics;
 using MemeSearcher.Infrastructure.Processes;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace MemeSearcher.Infrastructure.Transcription;
 
@@ -24,7 +25,7 @@ namespace MemeSearcher.Infrastructure.Transcription;
 /// count-mismatch fallback). A true "align given text" operation would need MFA (Milestone 6) or
 /// whisperx's Python API rather than its CLI.
 /// </summary>
-public class WhisperXAlignmentProvider(WhisperXToolLocator toolLocator) : IAlignmentProvider
+public class WhisperXAlignmentProvider([FromKeyedServices("whisperx")] IExternalToolLocator toolLocator) : IAlignmentProvider
 {
     public string ProviderName => "whisperx";
 

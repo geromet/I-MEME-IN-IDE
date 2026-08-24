@@ -89,17 +89,23 @@ public partial class App : Application
         // at once (#14). One shared instance for the app's lifetime - it *is* the queue.
         services.AddSingleton<IJobQueue>(_ => new JobQueueService(maxConcurrency: 1));
 
+        // #16: every locator is keyed under its own ToolName, all against the one IExternalToolLocator
+        // interface - previously only one implementation could ever claim that interface (DI
+        // resolves the last registration), so every locator but espeak was registered as its own
+        // concrete type instead, and every consumer depended on that concrete type directly. A
+        // consumer now asks for "the locator keyed <name>" via [FromKeyedServices(...)] on its own
+        // constructor parameter (still typed IExternalToolLocator) - the interface finally earns its
+        // keep, adding a sixth tool is one AddKeyedSingleton line instead of a repeated dance, and
+        // GetKeyedServices(KeyedService.AnyKey) below enumerates every one of them without a
+        // hand-maintained list that a forgotten line would silently fall out of.
+        //
         // Every locator gets the settings store and the tool category: without them a locator
         // silently ignores its configured path and keeps reporting "not found on PATH".
-        services.AddSingleton<IExternalToolLocator>(sp => new EspeakToolLocator(
+        services.AddKeyedSingleton<IExternalToolLocator>("espeak-ng", (sp, _) => new EspeakToolLocator(
             sp.GetRequiredService<ISettingsStore>(), sp.GetRequiredService<ExternalToolSettings>()));
         services.AddSingleton<IPhonemizer, EspeakPhonemizer>();
 
-        // Milestone 3: not registered as IExternalToolLocator, since only one implementation of
-        // that interface can be resolved via DI at a time and espeak already claims it -
-        // WhisperXTranscriptionProvider/MediaMetadataProbe depend on their concrete locator types
-        // directly instead.
-        services.AddSingleton(sp => new WhisperXToolLocator(
+        services.AddKeyedSingleton<IExternalToolLocator>("whisperx", (sp, _) => new WhisperXToolLocator(
             sp.GetRequiredService<ISettingsStore>(), sp.GetRequiredService<ExternalToolSettings>()));
         services.AddSingleton<ITranscriptionProvider, WhisperXTranscriptionProvider>();
         // Milestone 6: MFA is the default IAlignmentProvider consumed by
@@ -108,15 +114,18 @@ public partial class App : Application
         // registered as its own concrete type so it's still available/testable, but no longer
         // claims the shared interface slot.
         services.AddSingleton<WhisperXAlignmentProvider>();
-        services.AddSingleton(sp => new MfaToolLocator(
+        services.AddKeyedSingleton<IExternalToolLocator>("mfa", (sp, _) => new MfaToolLocator(
             sp.GetRequiredService<ISettingsStore>(), sp.GetRequiredService<ExternalToolSettings>()));
         services.AddSingleton<IAlignmentProvider, MfaAlignmentProvider>();
-        services.AddSingleton(sp => new FFprobeToolLocator(
+        services.AddKeyedSingleton<IExternalToolLocator>("ffprobe", (sp, _) => new FFprobeToolLocator(
             sp.GetRequiredService<ISettingsStore>(), sp.GetRequiredService<ExternalToolSettings>()));
         services.AddSingleton<MediaMetadataProbe>();
-        services.AddSingleton(sp => new FFmpegToolLocator(
+        services.AddKeyedSingleton<IExternalToolLocator>("ffmpeg", (sp, _) => new FFmpegToolLocator(
             sp.GetRequiredService<ISettingsStore>(), sp.GetRequiredService<ExternalToolSettings>()));
         services.AddSingleton<FFmpegClipExtractor>();
+
+        services.AddSingleton<IToolRegistry>(sp => new ToolRegistry(
+            [.. sp.GetKeyedServices<IExternalToolLocator>(KeyedService.AnyKey)]));
 
         // Milestone 7: shared across the app's lifetime (not per-scope) so repeat searches
         // actually benefit from the cache instead of getting a fresh empty one each request.

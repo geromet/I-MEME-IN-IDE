@@ -4,6 +4,7 @@ using MemeSearcher.Core.Languages;
 using MemeSearcher.Core.Phonetics;
 using MemeSearcher.Infrastructure.Processes;
 using MemeSearcher.Core.Transcripts;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace MemeSearcher.Infrastructure.Phonetics;
 
@@ -15,7 +16,7 @@ namespace MemeSearcher.Infrastructure.Phonetics;
 /// benefit. If per-call process-spawn overhead ever becomes a bottleneck, a persistent worker
 /// process is the natural next step - not Python.
 /// </summary>
-public class EspeakPhonemizer(IExternalToolLocator toolLocator) : IPhonemizer
+public class EspeakPhonemizer([FromKeyedServices("espeak-ng")] IExternalToolLocator toolLocator) : IPhonemizer
 {
     public string ProviderName => "espeak-ng";
 

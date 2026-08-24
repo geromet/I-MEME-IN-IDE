@@ -5,6 +5,7 @@ using MemeSearcher.Core.Languages;
 using MemeSearcher.Core.Settings;
 using MemeSearcher.Infrastructure.Processes;
 using MemeSearcher.Infrastructure.Settings;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace MemeSearcher.Infrastructure.Transcription;
 
@@ -21,7 +22,7 @@ namespace MemeSearcher.Infrastructure.Transcription;
 /// else entirely (e.g. an imported SRT) and needs aligning against audio on its own.
 /// </summary>
 public class WhisperXTranscriptionProvider(
-    WhisperXToolLocator toolLocator,
+    [FromKeyedServices("whisperx")] IExternalToolLocator toolLocator,
     ISettingsStore settings,
     WhisperXSettings whisperXSettings) : ITranscriptionProvider
 {

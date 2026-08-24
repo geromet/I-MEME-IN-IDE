@@ -5,6 +5,7 @@ using MemeSearcher.Core.Phonetics;
 using MemeSearcher.Core.Settings;
 using MemeSearcher.Infrastructure.Settings;
 using MemeSearcher.Infrastructure.Processes;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace MemeSearcher.Infrastructure.Alignment;
 
@@ -22,7 +23,7 @@ namespace MemeSearcher.Infrastructure.Alignment;
 /// en-US for now, matching the rest of the project's current "en-US only" scope.
 /// </summary>
 public partial class MfaAlignmentProvider(
-    MfaToolLocator toolLocator,
+    [FromKeyedServices("mfa")] IExternalToolLocator toolLocator,
     ISettingsStore settings,
     MfaSettings mfaSettings) : IAlignmentProvider
 {

@@ -1,7 +1,9 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.Text.Json;
+using MemeSearcher.Core.Interfaces;
 using MemeSearcher.Infrastructure.Processes;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace MemeSearcher.Infrastructure.Ffmpeg;
 
@@ -10,7 +12,7 @@ namespace MemeSearcher.Infrastructure.Ffmpeg;
 /// FFmpeg integration" from the addendum's Milestone 3 - kept separate from transcription, since
 /// WhisperX decodes audio/video itself and doesn't need FFmpeg pre-extraction to run.
 /// </summary>
-public class MediaMetadataProbe(FFprobeToolLocator toolLocator)
+public class MediaMetadataProbe([FromKeyedServices("ffprobe")] IExternalToolLocator toolLocator)
 {
     public async Task<TimeSpan?> TryGetDurationAsync(string mediaPath, CancellationToken cancellationToken = default)
     {

@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using MemeSearcher.Core.Interfaces;
 using MemeSearcher.Infrastructure.Processes;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace MemeSearcher.Infrastructure.Ffmpeg;
 
@@ -15,7 +16,7 @@ public record ClipExtractionResult(bool Success, string? OutputPath, string? Err
 /// extracts each component the same way, then stitches them with ffmpeg's concat demuxer -
 /// verified against real ffmpeg output on this machine, not just documentation.
 /// </summary>
-public class FFmpegClipExtractor(FFmpegToolLocator toolLocator)
+public class FFmpegClipExtractor([FromKeyedServices("ffmpeg")] IExternalToolLocator toolLocator)
 {
     public async Task<ClipExtractionResult> ExtractAsync(
         string mediaPath, double startSeconds, double endSeconds, string outputPath, CancellationToken cancellationToken = default)
