@@ -6,6 +6,7 @@ using MemeSearcher.Core.Interfaces;
 using MemeSearcher.Core.Jobs;
 using MemeSearcher.Core.Settings;
 using MemeSearcher.Infrastructure.Alignment;
+using MemeSearcher.Infrastructure.Catalogs;
 using MemeSearcher.Infrastructure.Database;
 using MemeSearcher.Infrastructure.Ffmpeg;
 using MemeSearcher.Infrastructure.Jobs;
@@ -123,6 +124,7 @@ public partial class App : Application
         services.AddScoped<ICompositeSearchService, CompositeSearchService>();
         services.AddScoped<LibraryService>();
         services.AddScoped<SearchHistoryService>();
+        services.AddScoped<CatalogService>();
 
         services.AddSingleton<IFilePickerService, AvaloniaFilePickerService>();
         services.AddSingleton<IClipboardService, AvaloniaClipboardService>();
@@ -144,6 +146,7 @@ public partial class App : Application
         services.AddSingleton<SettingsViewModel>();
         services.AddSingleton<JobsPanelViewModel>();
         services.AddSingleton<InspectorViewModel>();
+        services.AddSingleton<CatalogsViewModel>();
         services.AddSingleton<IViewPanel>(sp => new ViewPanelDescriptor(
             PanelIds.Library, "Library", DockZone.Left, sp.GetRequiredService<LibraryViewModel>()));
         services.AddSingleton<IViewPanel>(sp => new ViewPanelDescriptor(
@@ -152,6 +155,8 @@ public partial class App : Application
             PanelIds.Jobs, "Jobs / Errors", DockZone.Bottom, sp.GetRequiredService<JobsPanelViewModel>(), visibleByDefault: false));
         services.AddSingleton<IViewPanel>(sp => new ViewPanelDescriptor(
             PanelIds.Settings, "Settings", DockZone.Right, sp.GetRequiredService<SettingsViewModel>(), visibleByDefault: false));
+        services.AddSingleton<IViewPanel>(sp => new ViewPanelDescriptor(
+            PanelIds.Catalogs, "Catalogs", DockZone.Left, sp.GetRequiredService<CatalogsViewModel>(), visibleByDefault: false));
 
         services.AddTransient<MainWindowViewModel>();
         services.AddTransient<MainWindow>();

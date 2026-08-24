@@ -12,6 +12,8 @@ public class MemeSearcherDbContext(DbContextOptions<MemeSearcherDbContext> optio
     public DbSet<Phone> Phones => Set<Phone>();
     public DbSet<SearchHistoryEntry> SearchHistory => Set<SearchHistoryEntry>();
     public DbSet<PhoneNGramPosting> PhoneNGramPostings => Set<PhoneNGramPosting>();
+    public DbSet<Catalog> Catalogs => Set<Catalog>();
+    public DbSet<CatalogMedia> CatalogMedia => Set<CatalogMedia>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -114,6 +116,31 @@ public class MemeSearcherDbContext(DbContextOptions<MemeSearcherDbContext> optio
             entity.HasOne<Media>()
                 .WithMany()
                 .HasForeignKey(p => p.MediaId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<Catalog>(entity =>
+        {
+            entity.HasKey(c => c.Id);
+            entity.Property(c => c.Name).IsRequired();
+        });
+
+        modelBuilder.Entity<CatalogMedia>(entity =>
+        {
+            entity.HasKey(cm => new { cm.CatalogId, cm.MediaId });
+
+            // Deleting a catalog removes only these join rows (#20: "deleting a catalog must never
+            // delete sources").
+            entity.HasOne<Catalog>()
+                .WithMany()
+                .HasForeignKey(cm => cm.CatalogId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Deleting a source removes it from every catalog without orphaning rows (#20 exit
+            // criterion) - the same cascade mechanism PhoneNGramPosting already relies on above.
+            entity.HasOne<Media>()
+                .WithMany()
+                .HasForeignKey(cm => cm.MediaId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
     }

@@ -34,6 +34,7 @@ public static class PanelIds
     public const string Inspector = "inspector";
     public const string Jobs = "jobs";
     public const string Settings = "settings";
+    public const string Catalogs = "catalogs";
 }
 
 /// <summary>Plain <see cref="IViewPanel"/> implementation for DI registration - see App.axaml.cs.</summary>

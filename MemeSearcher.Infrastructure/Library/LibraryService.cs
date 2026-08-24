@@ -71,6 +71,16 @@ public class LibraryService(IDbContextFactory<MemeSearcherDbContext> dbContextFa
         return (ids.Where(m => m.IsSelectedForSearch).Select(m => m.Id).ToList(), ids.Count);
     }
 
+    /// <summary>
+    /// Milestone 17 (#20): display label for the most recent catalog applied via
+    /// <see cref="ApplyCatalogScopeAsync"/>, so SearchViewModel's scope description can say
+    /// "Catalog: Vine compilations (12 sources)" instead of the generic "12 of 47 source(s)" - the
+    /// discriminator #20's exit criteria need ("records the catalog"). Purely a display hint, not
+    /// persisted: it's cleared by any subsequent manual selection edit below, since at that point
+    /// the checkbox state can no longer be said to be "exactly this catalog".
+    /// </summary>
+    public string? ActiveCatalogLabel { get; private set; }
+
     public async Task SetSelectedAsync(Guid mediaId, bool isSelected, CancellationToken cancellationToken = default)
     {
         await using var context = await dbContextFactory.CreateDbContextAsync(cancellationToken);
@@ -83,6 +93,7 @@ public class LibraryService(IDbContextFactory<MemeSearcherDbContext> dbContextFa
 
         media.IsSelectedForSearch = isSelected;
         await context.SaveChangesAsync(cancellationToken);
+        ActiveCatalogLabel = null;
     }
 
     /// <summary>Select-all / select-none, and invert - addendum §13's affordances alongside per-row checkboxes.</summary>
@@ -96,6 +107,7 @@ public class LibraryService(IDbContextFactory<MemeSearcherDbContext> dbContextFa
         }
 
         await context.SaveChangesAsync(cancellationToken);
+        ActiveCatalogLabel = null;
     }
 
     public async Task InvertSelectionAsync(CancellationToken cancellationToken = default)
@@ -108,6 +120,26 @@ public class LibraryService(IDbContextFactory<MemeSearcherDbContext> dbContextFa
         }
 
         await context.SaveChangesAsync(cancellationToken);
+        ActiveCatalogLabel = null;
+    }
+
+    /// <summary>
+    /// Milestone 17 (#20): "select a catalog as the active search scope" is implemented as exactly
+    /// this - bulk-setting IsSelectedForSearch to match catalog membership, reusing #13's scope
+    /// machinery unchanged rather than adding a new scope kind to Core (#20's explicit instruction).
+    /// </summary>
+    public async Task ApplyCatalogScopeAsync(IReadOnlyCollection<Guid> mediaIds, string catalogLabel, CancellationToken cancellationToken = default)
+    {
+        await using var context = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+
+        var memberIds = mediaIds.ToHashSet();
+        await foreach (var media in context.Media.AsAsyncEnumerable().WithCancellation(cancellationToken))
+        {
+            media.IsSelectedForSearch = memberIds.Contains(media.Id);
+        }
+
+        await context.SaveChangesAsync(cancellationToken);
+        ActiveCatalogLabel = catalogLabel;
     }
 
     /// <summary>

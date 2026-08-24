@@ -1,0 +1,96 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:MemeSearcher.ViewModels"
+             mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="550"
+             x:Class="MemeSearcher.Views.CatalogsView"
+             x:DataType="vm:CatalogsViewModel"
+             x:Name="Root">
+    <Grid Margin="12" RowDefinitions="Auto,Auto,Auto,*">
+        <TextBlock Grid.Row="0" Classes="PanelHeader" Text="CATALOGS" Margin="0,0,0,8" />
+
+        <!-- #20: named, saved, curated subsets of the corpus - create one here, then apply it to a search. -->
+        <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="6" Margin="0,0,0,4">
+            <TextBox Text="{Binding NewCatalogName}" PlaceholderText="Catalog name" Width="160" />
+            <TextBox Text="{Binding NewCatalogDescription}" PlaceholderText="Description (optional)" Width="220" />
+            <Button Content="Create" Command="{Binding CreateCommand}" />
+        </StackPanel>
+
+        <Border Grid.Row="2"
+                Margin="0,0,0,12"
+                Padding="10"
+                CornerRadius="4"
+                Background="{StaticResource StatusErrorMuted}"
+                IsVisible="{Binding IsStatusError}">
+            <SelectableTextBlock Text="{Binding StatusMessage}" TextWrapping="Wrap" Foreground="{StaticResource TextPrimary}" />
+        </Border>
+
+        <TextBlock Grid.Row="2"
+                   Classes="FieldLabel"
+                   Margin="0,0,0,12"
+                   Text="{Binding StatusMessage}"
+                   TextWrapping="Wrap"
+                   IsVisible="{Binding !IsStatusError}" />
+
+        <Grid Grid.Row="3" ColumnDefinitions="*,*">
+            <ListBox Grid.Column="0"
+                     Margin="0,0,6,0"
+                     ItemsSource="{Binding Catalogs}"
+                     SelectedItem="{Binding SelectedCatalog}">
+                <ListBox.ItemTemplate>
+                    <DataTemplate x:DataType="vm:CatalogRowViewModel">
+                        <Border Padding="10" Margin="0,3" BorderThickness="1" BorderBrush="{StaticResource BorderMid}" CornerRadius="4">
+                            <StackPanel Spacing="4">
+                                <TextBlock Text="{Binding Name}" FontSize="14" FontWeight="Bold" Foreground="{StaticResource TextPrimary}" TextWrapping="Wrap" />
+                                <TextBlock Classes="FieldLabel" Text="{Binding Description}" TextWrapping="Wrap" IsVisible="{Binding HasDescription}" />
+                                <TextBlock Classes="HeaderLabel" Text="{Binding MemberCountDisplay}" />
+
+                                <WrapPanel Margin="0,4,0,0">
+                                    <Button Content="Apply to Search"
+                                            Margin="0,0,6,6"
+                                            Command="{Binding #Root.((vm:CatalogsViewModel)DataContext).ApplyToSearchCommand}"
+                                            CommandParameter="{Binding}"
+                                            ToolTip.Tip="Set the active search scope to exactly this catalog's sources (#13/#20)." />
+                                    <Button Content="Delete"
+                                            Margin="0,0,6,6"
+                                            Command="{Binding #Root.((vm:CatalogsViewModel)DataContext).DeleteCommand}"
+                                            CommandParameter="{Binding}"
+                                            IsVisible="{Binding !IsPendingDelete}" />
+                                    <Button Classes="Danger"
+                                            Content="Confirm Delete?"
+                                            Margin="0,0,6,6"
+                                            Command="{Binding #Root.((vm:CatalogsViewModel)DataContext).DeleteCommand}"
+                                            CommandParameter="{Binding}"
+                                            IsVisible="{Binding IsPendingDelete}" />
+                                    <Button Content="Cancel"
+                                            Margin="0,0,6,6"
+                                            Command="{Binding #Root.((vm:CatalogsViewModel)DataContext).CancelDeleteCommand}"
+                                            CommandParameter="{Binding}"
+                                            IsVisible="{Binding IsPendingDelete}" />
+                                </WrapPanel>
+                            </StackPanel>
+                        </Border>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+
+            <Grid Grid.Column="1" Margin="6,0,0,0" RowDefinitions="Auto,*" IsVisible="{Binding HasSelectedCatalog}">
+                <TextBlock Grid.Row="0" Classes="HeaderLabel" Margin="0,0,0,4"
+                           Text="{Binding SelectedCatalog.Name, StringFormat='Members of &quot;{0}&quot;'}" />
+
+                <ListBox Grid.Row="1" ItemsSource="{Binding Members}">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate x:DataType="vm:CatalogMemberRowViewModel">
+                            <CheckBox IsChecked="{Binding IsMember}"
+                                      Margin="0,2"
+                                      ToolTip.Tip="In this catalog when checked.">
+                                <TextBlock Text="{Binding Title}" TextWrapping="Wrap" Foreground="{StaticResource TextPrimary}" />
+                            </CheckBox>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </Grid>
+        </Grid>
+    </Grid>
+</UserControl>

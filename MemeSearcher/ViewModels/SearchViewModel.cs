@@ -160,7 +160,13 @@ public partial class SearchViewModel(
             return (new SearchScope.AllIndexedMedia(), "All indexed media", null);
         }
 
-        return (new SearchScope.SelectedMedia(selectedIds), $"{selectedIds.Count} of {total} source(s)", selectedIds);
+        // Milestone 17 (#20): a catalog applied to the scope reads as "Catalog: name (n sources)"
+        // rather than the generic count - see LibraryService.ActiveCatalogLabel.
+        var description = libraryService.ActiveCatalogLabel is { } catalogLabel
+            ? $"Catalog: {catalogLabel} ({selectedIds.Count} source(s))"
+            : $"{selectedIds.Count} of {total} source(s)";
+
+        return (new SearchScope.SelectedMedia(selectedIds), description, selectedIds);
     }
 
     private async Task<(SearchScope Scope, string Description, IReadOnlyCollection<Guid>? IdsForHistory)> DescribeExplicitScopeAsync(SearchScope scope)
