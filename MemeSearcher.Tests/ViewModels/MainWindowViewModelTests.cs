@@ -66,6 +66,7 @@ public class MainWindowViewModelTests : IDisposable
         var settingsViewModel = new SettingsViewModel(new SettingsRegistry([]), settingsStore);
         var jobsPanelViewModel = new JobsPanelViewModel(jobQueue);
         var inspectorViewModel = new InspectorViewModel(new FakeMediaPlayerLauncher());
+        var transcriptPanelViewModel = new TranscriptPanelViewModel(new TranscriptViewService(dbContextFactory), libraryService);
 
         IViewPanel[] panels =
         [
@@ -75,7 +76,8 @@ public class MainWindowViewModelTests : IDisposable
             new ViewPanelDescriptor(PanelIds.Settings, "Settings", DockZone.Right, settingsViewModel, visibleByDefault: false),
         ];
 
-        var viewModel = new MainWindowViewModel(SearchViewModelFactory, libraryViewModel, jobsPanelViewModel, inspectorViewModel, panels, settingsStore);
+        var viewModel = new MainWindowViewModel(
+            SearchViewModelFactory, libraryViewModel, jobsPanelViewModel, inspectorViewModel, transcriptPanelViewModel, panels, settingsStore);
 
         return (viewModel, dbContextFactory, phonemizer);
     }

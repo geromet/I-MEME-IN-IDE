@@ -129,6 +129,7 @@ public partial class App : Application
         services.AddScoped<TemplateService>();
         services.AddScoped<TemplateSearchService>();
         services.AddScoped<TemplateImportExportService>();
+        services.AddScoped<TranscriptViewService>();
 
         services.AddSingleton<IFilePickerService, AvaloniaFilePickerService>();
         services.AddSingleton<IClipboardService, AvaloniaClipboardService>();
@@ -150,11 +151,17 @@ public partial class App : Application
         services.AddSingleton<SettingsViewModel>();
         services.AddSingleton<JobsPanelViewModel>();
         services.AddSingleton<InspectorViewModel>();
+        services.AddSingleton<TranscriptPanelViewModel>();
         services.AddSingleton<CatalogsViewModel>();
         services.AddSingleton<IViewPanel>(sp => new ViewPanelDescriptor(
             PanelIds.Library, "Library", DockZone.Left, sp.GetRequiredService<LibraryViewModel>()));
         services.AddSingleton<IViewPanel>(sp => new ViewPanelDescriptor(
             PanelIds.Inspector, "Inspector", DockZone.Right, sp.GetRequiredService<InspectorViewModel>()));
+        // DockZone.Bottom, not Right: Inspector already occupies Right, and that zone's TabControl
+        // only shows one tab at a time. #26's whole point is a phones-view (Inspector) plus a
+        // lines-view (Transcript) visible together, not fighting over the same tab slot.
+        services.AddSingleton<IViewPanel>(sp => new ViewPanelDescriptor(
+            PanelIds.Transcript, "Transcript", DockZone.Bottom, sp.GetRequiredService<TranscriptPanelViewModel>()));
         services.AddSingleton<IViewPanel>(sp => new ViewPanelDescriptor(
             PanelIds.Jobs, "Jobs / Errors", DockZone.Bottom, sp.GetRequiredService<JobsPanelViewModel>(), visibleByDefault: false));
         services.AddSingleton<IViewPanel>(sp => new ViewPanelDescriptor(

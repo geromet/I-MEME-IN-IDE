@@ -36,6 +36,7 @@ public static class PanelIds
     public const string Settings = "settings";
     public const string Catalogs = "catalogs";
     public const string Templates = "templates";
+    public const string Transcript = "transcript";
 }
 
 /// <summary>Plain <see cref="IViewPanel"/> implementation for DI registration - see App.axaml.cs.</summary>

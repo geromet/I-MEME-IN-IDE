@@ -27,6 +27,9 @@ public partial class MainWindowViewModel : ViewModelBase
 
     public InspectorViewModel Inspector { get; }
 
+    /// <summary>#26: driven by the same SelectedResult signal as Inspector - one click, one meaning, fanned out to both panels.</summary>
+    public TranscriptPanelViewModel TranscriptPanel { get; }
+
     /// <summary>Every registered panel, in registration order - what the View menu lists.</summary>
     public IReadOnlyList<PanelSlotViewModel> Panels { get; }
 
@@ -56,12 +59,14 @@ public partial class MainWindowViewModel : ViewModelBase
 
     public MainWindowViewModel(
         Func<SearchViewModel> searchViewModelFactory, LibraryViewModel library,
-        JobsPanelViewModel jobs, InspectorViewModel inspector, IEnumerable<IViewPanel> panels, Core.Settings.ISettingsStore settingsStore)
+        JobsPanelViewModel jobs, InspectorViewModel inspector, TranscriptPanelViewModel transcriptPanel,
+        IEnumerable<IViewPanel> panels, Core.Settings.ISettingsStore settingsStore)
     {
         _searchViewModelFactory = searchViewModelFactory;
         Library = library;
         Jobs = jobs;
         Inspector = inspector;
+        TranscriptPanel = transcriptPanel;
 
         Panels = panels.Select(p => new PanelSlotViewModel(p, settingsStore)).ToArray();
         foreach (var slot in Panels)
@@ -155,6 +160,7 @@ public partial class MainWindowViewModel : ViewModelBase
         }
 
         Inspector.Show(value?.SelectedResult);
+        TranscriptPanel.Show(value?.SelectedResult);
     }
 
     private void OnActiveTabPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -162,6 +168,7 @@ public partial class MainWindowViewModel : ViewModelBase
         if (e.PropertyName == nameof(SearchViewModel.SelectedResult))
         {
             Inspector.Show(_inspectedTab?.SelectedResult);
+            TranscriptPanel.Show(_inspectedTab?.SelectedResult);
         }
     }
 

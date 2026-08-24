@@ -235,6 +235,19 @@
                 <Setter Property="Background" Value="{StaticResource StatusErrorMuted}" />
             </Style>
 
+            <!-- Transcript viewer cues (#26): the matched cue reads visibly differently from the
+                 rest of the transcript, without needing color to carry the whole distinction (a
+                 left accent bar plus background tint survives a quick glance either way). -->
+            <Style Selector="Border.TranscriptCue">
+                <Setter Property="BorderThickness" Value="3 0 0 0" />
+                <Setter Property="BorderBrush" Value="Transparent" />
+                <Setter Property="Margin" Value="0 0 0 2" />
+            </Style>
+            <Style Selector="Border.TranscriptCue.Highlighted">
+                <Setter Property="Background" Value="{StaticResource AccentMuted}" />
+                <Setter Property="BorderBrush" Value="{StaticResource Accent}" />
+            </Style>
+
             <!-- ══ TABS ══ -->
 
             <Style Selector="TabControl">

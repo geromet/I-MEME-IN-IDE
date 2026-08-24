@@ -248,6 +248,48 @@ public class AlignedPhoneSearchTests : IDisposable
         Assert.All(match.MatchedPhoneDetails, p => Assert.False(p.IsPhoneLevelAligned));
     }
 
+    /// <summary>
+    /// #26: the transcript viewer resolves a match onto real Segment/Word rows via this identity,
+    /// not by reconstructing it from time-range overlap - so it has to actually survive the trip
+    /// from PhoneStreamEntry through to MatchedPhone, and has to identify the *real* rows (checked
+    /// here by round-tripping back through the database), not just be non-null.
+    /// </summary>
+    [Fact]
+    public async Task SearchAsync_MatchedPhonesCarryTheirRealSegmentAndWordIds()
+    {
+        var setup = await TrySetUpAsync();
+        if (setup is null)
+        {
+            return;
+        }
+
+        var (phonemizer, services) = setup.Value;
+        await ImportAndRealignAsync(services, phonemizer, new FakeAlignmentProvider(HelloWorldArpabet));
+
+        var searchService = new Infrastructure.Search.PhoneticSearchService(
+            Factory(services), phonemizer, new Infrastructure.Search.InMemoryQueryPhonemizationCache());
+
+        var results = await searchService.SearchAsync("hello", "en-US", new SearchScope.AllIndexedMedia());
+        var match = Assert.Single(results);
+
+        Assert.NotEmpty(match.MatchedPhoneDetails);
+        Assert.All(match.MatchedPhoneDetails, p =>
+        {
+            Assert.NotNull(p.SegmentId);
+            Assert.NotNull(p.WordId);
+        });
+
+        // Every matched phone came from "hello" specifically, not "world" - a single word's worth
+        // of phones should all carry that one WordId, not a mix.
+        var wordIds = match.MatchedPhoneDetails.Select(p => p.WordId).Distinct().ToList();
+        var wordId = Assert.Single(wordIds);
+
+        await using var context = await Factory(services).CreateDbContextAsync();
+        var word = await context.Words.SingleAsync(w => w.Id == wordId);
+        Assert.Equal("hello", word.Text);
+        Assert.Equal(match.MatchedPhoneDetails[0].SegmentId, word.SegmentId);
+    }
+
     [Fact]
     public async Task SearchAsync_ResolvesMatchesToTheAlignersTiming()
     {

@@ -25,5 +25,14 @@ public class Word
     public double? StartSeconds { get; set; }
     public double? EndSeconds { get; set; }
 
+    /// <summary>
+    /// True when StartSeconds/EndSeconds is a character-proportional guess across the segment's own
+    /// span (MediaIngestionService.BuildWordsFromInterpolation), not a real per-word timestamp from
+    /// a transcription/alignment provider (#26). Meaningless when StartSeconds is null - there is no
+    /// timing to qualify. The transcript viewer degrades to cue-level highlighting whenever this is
+    /// true, since a plausible-looking guess is not the same guarantee real timing is.
+    /// </summary>
+    public bool IsTimingInterpolated { get; set; }
+
     public List<Phone> Phones { get; set; } = [];
 }

@@ -5,9 +5,13 @@ namespace MemeSearcher.Core.Search;
 /// reason as SearchResult's own StartSeconds/EndSeconds (#32); IsPhoneLevelAligned is false when
 /// this phoneme's span was inherited from its whole word rather than measured per-phone by an
 /// alignment provider (see PhoneStreamBuilder's own doc comment) - the inspector's "aligned" vs
-/// "estimated" distinction (handoff §49) comes directly from this flag.
+/// "estimated" distinction (handoff §49) comes directly from this flag. SegmentId/WordId (#26) are
+/// this phoneme's provenance back to the transcript it came from - a lookup key for the transcript
+/// viewer to resolve a match onto real Segment/Word rows, rather than reconstructing that mapping
+/// by guessing from time-range overlap. Null only for a boundary token, which carries no phoneme
+/// (and so no word) at all.
 /// </summary>
-public record MatchedPhone(string Symbol, double? StartSeconds, double? EndSeconds, bool IsPhoneLevelAligned);
+public record MatchedPhone(string Symbol, double? StartSeconds, double? EndSeconds, bool IsPhoneLevelAligned, Guid? SegmentId = null, Guid? WordId = null);
 
 /// <summary>
 /// One step of the query-to-match alignment, resolved to symbols rather than raw indices so the

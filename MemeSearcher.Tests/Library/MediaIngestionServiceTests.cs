@@ -206,6 +206,10 @@ public class MediaIngestionServiceTests : IDisposable
         Assert.Equal(1.9, words[1].EndSeconds);
         Assert.Equal(1.9, words[2].StartSeconds);
         Assert.Equal(2.0, words[2].EndSeconds);
+
+        // #26: real per-word timing from the transcription provider is not a guess - the
+        // transcript viewer needs to tell this apart from an interpolated span.
+        Assert.All(words, w => Assert.False(w.IsTimingInterpolated));
     }
 
     [Fact]
@@ -243,6 +247,10 @@ public class MediaIngestionServiceTests : IDisposable
         Assert.Equal(3, words.Count); // phonemizer's own split, not the mismatched "real" word count
         Assert.Equal(0.5, words[0].StartSeconds); // interpolation still starts/ends at the cue bounds
         Assert.Equal(2.0, words[^1].EndSeconds);
+
+        // #26: a character-proportional guess, not a real per-word timestamp - the fallback this
+        // test exists to exercise is exactly the case the transcript viewer must degrade for.
+        Assert.All(words, w => Assert.True(w.IsTimingInterpolated));
     }
 
     [Fact]
@@ -336,6 +344,11 @@ public class MediaIngestionServiceTests : IDisposable
 
         var helloPhones = words[0].Phones.OrderBy(p => p.Sequence).Select(p => p.Symbol).ToList();
         Assert.Equal(["HH", "AH0", "L", "OW1"], helloPhones);
+
+        // #26: the import above had no real per-word timing (srt gives only cue-level timestamps),
+        // so these words started life interpolated - realignment must clear that flag now that
+        // their timing is real, or the transcript viewer would keep degrading a now-aligned word.
+        Assert.All(words, w => Assert.False(w.IsTimingInterpolated));
     }
 
     /// <summary>

@@ -310,7 +310,7 @@ public class PhoneticSearchService(
         var queryPhonemes = queryTokens.Where(t => !t.IsBoundary).Select(t => t.Symbol).ToList();
 
         var matchedPhoneDetails = phonemeEntries
-            .Select(e => new MatchedPhone(e.Token.Symbol, e.StartSeconds, e.EndSeconds, e.IsPhoneLevelAligned))
+            .Select(e => new MatchedPhone(e.Token.Symbol, e.StartSeconds, e.EndSeconds, e.IsPhoneLevelAligned, e.SegmentId, e.WordId))
             .ToList();
 
         // Word-boundary tokens align cheaply against each other (SubstitutionCost gives them a

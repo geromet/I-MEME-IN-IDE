@@ -190,6 +190,10 @@ public class MediaIngestionService(
 
             word.StartSeconds = aligned.StartSeconds;
             word.EndSeconds = aligned.EndSeconds;
+            // Real per-word timing from the aligner - clears any stale interpolated flag a
+            // transcript-only import had left set, so a realigned word isn't still degraded to
+            // cue-level highlighting in the transcript viewer (#26) after this now-real update.
+            word.IsTimingInterpolated = false;
             updatedWordCount++;
 
             if (alignment.Phones is null)
@@ -456,6 +460,9 @@ public class MediaIngestionService(
             PhonemeAlphabet = alphabet,
             StartSeconds = null,
             EndSeconds = null,
+            // No timing exists to be real or interpolated - false is the same "not applicable"
+            // default as everywhere else, since a null StartSeconds already tells the real story.
+            IsTimingInterpolated = false,
         })];
 
     private static List<CoreModels.Word> BuildWordsFromRealTiming(
@@ -480,6 +487,7 @@ public class MediaIngestionService(
                 PhonemeAlphabet = alphabet,
                 StartSeconds = realWords[i].StartSeconds,
                 EndSeconds = realWords[i].EndSeconds,
+                IsTimingInterpolated = false,
             });
         }
 
@@ -515,6 +523,7 @@ public class MediaIngestionService(
                 PhonemeAlphabet = alphabet,
                 StartSeconds = wordStart,
                 EndSeconds = wordEnd,
+                IsTimingInterpolated = true,
             });
         }
 

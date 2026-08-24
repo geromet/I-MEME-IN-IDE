@@ -1,0 +1,59 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:MemeSearcher.ViewModels"
+             mc:Ignorable="d" d:DesignWidth="280" d:DesignHeight="550"
+             x:Class="MemeSearcher.Views.TranscriptPanelView"
+             x:DataType="vm:TranscriptPanelViewModel"
+             x:Name="Root">
+    <!-- #26 (Milestone 21): one tab per media a search result has been opened from, scrolled and
+         highlighted to the selected result's own matched cue(s). The tab strip here is this
+         panel's own private concern (see TranscriptPanelViewModel's own doc comment) - not a
+         second IViewPanel per open transcript. -->
+    <DockPanel Margin="10">
+        <TextBlock DockPanel.Dock="Top" Classes="PanelHeader" Text="TRANSCRIPT" Margin="0,0,0,8" />
+
+        <TextBlock DockPanel.Dock="Top" Classes="FieldLabel" TextWrapping="Wrap"
+                   Text="Select a result to open its transcript here."
+                   IsVisible="{Binding !HasTabs}" />
+
+        <ItemsControl DockPanel.Dock="Top" Margin="0,0,0,6" ItemsSource="{Binding Tabs}" IsVisible="{Binding HasTabs}">
+            <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <WrapPanel Orientation="Horizontal" />
+                </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:TranscriptTabViewModel">
+                    <StackPanel Orientation="Horizontal" Spacing="2" Margin="0,0,4,4">
+                        <Button Classes="FilterPill"
+                                Content="{Binding Title}"
+                                Command="{Binding #Root.((vm:TranscriptPanelViewModel)DataContext).SelectTabCommand}"
+                                CommandParameter="{Binding}" />
+                        <Button Classes="NavLink" Content="✕" Padding="4,0"
+                                Command="{Binding #Root.((vm:TranscriptPanelViewModel)DataContext).CloseTabCommand}"
+                                CommandParameter="{Binding}" />
+                    </StackPanel>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <!-- A single persistent ListBox rebound to whichever tab is active, rather than one
+             ListBox per tab inside an outer TabControl - keeps one stable control to call
+             ScrollIntoView on from code-behind, and avoids wrapping it in a ScrollViewer (which
+             would give it unbounded height and defeat ListBox's default virtualization). -->
+        <ListBox x:Name="CueList" ItemsSource="{Binding ActiveTab.Cues}" IsVisible="{Binding HasTabs}">
+            <ListBox.ItemTemplate>
+                <DataTemplate x:DataType="vm:TranscriptCueViewModel">
+                    <Border Classes="TranscriptCue" Classes.Highlighted="{Binding IsHighlighted}" Padding="6,4">
+                        <StackPanel Spacing="2">
+                            <TextBlock Classes="FieldLabel" Text="{Binding TimeRangeDisplay}" IsVisible="{Binding HasTiming}" />
+                            <TextBlock Text="{Binding Text}" TextWrapping="Wrap" Foreground="{StaticResource TextPrimary}" />
+                        </StackPanel>
+                    </Border>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+    </DockPanel>
+</UserControl>
