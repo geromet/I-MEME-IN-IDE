@@ -17,6 +17,9 @@ public class CompositeComponentRowViewModel(CompositeMatchComponent component, s
     public Guid MediaId { get; } = component.MediaId;
     public string? MediaPath { get; } = mediaPath;
     public string MediaTitle { get; } = mediaTitle;
+
+    /// <summary>#26 part 3: this component's own SegmentId/WordId provenance, so clicking it can open and highlight just its own transcript rather than every contributing one.</summary>
+    public IReadOnlyList<MatchedPhone> MatchedPhoneDetails { get; } = component.MatchedPhoneDetails;
     public double? StartSeconds { get; } = component.StartSeconds;
     public double? EndSeconds { get; } = component.EndSeconds;
 

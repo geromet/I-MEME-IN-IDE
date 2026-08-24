@@ -133,6 +133,18 @@ public partial class SearchViewModel(
     [ObservableProperty]
     private SearchResultRowViewModel? _selectedResult;
 
+    /// <summary>
+    /// #26 part 3: which component of a composite result was clicked - composite mode has no
+    /// SelectedItem-style binding otherwise, since Components renders as a plain ItemsControl
+    /// nested inside each CompositeSearchResultRowViewModel, not a selector. Set by
+    /// SelectComponentCommand, which the clicked component's own button invokes.
+    /// </summary>
+    [ObservableProperty]
+    private CompositeComponentRowViewModel? _selectedComponent;
+
+    [RelayCommand]
+    private void SelectComponent(CompositeComponentRowViewModel component) => SelectedComponent = component;
+
     public ObservableCollection<SearchHistoryEntry> RecentSearches { get; } = [];
 
     [RelayCommand(CanExecute = nameof(CanSearch))]
@@ -264,6 +276,7 @@ public partial class SearchViewModel(
     private async Task<int> SearchSingleSourceAsync(SearchScope scope)
     {
         CompositeResults.Clear();
+        SelectedComponent = null;
 
         var results = await searchService.SearchAsync(QueryText, Language, scope);
         var mediaPaths = await libraryService.GetPathsAsync(results.Select(r => r.MediaId));
@@ -317,6 +330,7 @@ public partial class SearchViewModel(
     private async Task<int> SearchCompositeAsync(SearchScope scope)
     {
         SelectedResult = null;
+        SelectedComponent = null;
         Results.Clear();
         ResultGroups.Clear();
         StartAssemblyCommand.NotifyCanExecuteChanged();

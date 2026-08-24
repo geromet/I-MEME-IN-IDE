@@ -254,9 +254,22 @@
             <Style Selector="Border.TranscriptCue.Highlighted.WordLevel">
                 <Setter Property="Background" Value="Transparent" />
             </Style>
-            <Style Selector="Border.TranscriptWord.Highlighted">
-                <Setter Property="Background" Value="{StaticResource Accent}" />
+            <!-- Words are Buttons, not Borders (#26 part 3) - clicking one seeds a search from it. -->
+            <Style Selector="Button.TranscriptWord">
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="Padding" Value="2 0" />
+                <Setter Property="MinHeight" Value="0" />
                 <Setter Property="CornerRadius" Value="2" />
+                <Setter Property="Foreground" Value="{StaticResource TextPrimary}" />
+            </Style>
+            <Style Selector="Button.TranscriptWord:pointerover /template/ ContentPresenter">
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="TextBlock.Foreground" Value="{StaticResource AccentHover}" />
+                <Setter Property="TextBlock.TextDecorations" Value="Underline" />
+            </Style>
+            <Style Selector="Button.TranscriptWord.Highlighted">
+                <Setter Property="Background" Value="{StaticResource Accent}" />
             </Style>
 
             <!-- ══ TABS ══ -->

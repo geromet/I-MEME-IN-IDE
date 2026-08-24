@@ -202,6 +202,45 @@ public class SearchViewModelTests : IDisposable
         Assert.Equal("b.srt", viewModel.CompositeResults[0].Components[1].MediaTitle);
     }
 
+    /// <summary>#26 part 3: composite mode's own click signal - SelectedComponent is what MainWindowViewModel watches to fan a click out to the transcript panel, the same way SelectedResult already does for single-source mode.</summary>
+    [Fact]
+    public async Task SelectComponentCommand_SetsSelectedComponent()
+    {
+        var setup = await TrySetUpAsync();
+        if (setup is null)
+        {
+            return;
+        }
+
+        var (viewModel, dbContextFactory, phonemizer) = setup.Value;
+
+        await ImportAsync(dbContextFactory, phonemizer, _tempDir, "a.srt", """
+            1
+            00:00:10,000 --> 00:00:11,000
+            super
+
+            """);
+        await ImportAsync(dbContextFactory, phonemizer, _tempDir, "b.srt", """
+            1
+            00:00:20,000 --> 00:00:21,000
+            man
+
+            """);
+
+        viewModel.IsCompositeMode = true;
+        viewModel.QueryText = "superman";
+        await viewModel.SearchCommand.ExecuteAsync(null);
+
+        var component = viewModel.CompositeResults[0].Components[0];
+        viewModel.SelectComponentCommand.Execute(component);
+        Assert.Same(component, viewModel.SelectedComponent);
+
+        // A new search invalidates the prior selection - it references a component from a result
+        // set about to be replaced, the same reasoning SelectedResult's own clear already follows.
+        await viewModel.SearchCommand.ExecuteAsync(null);
+        Assert.Null(viewModel.SelectedComponent);
+    }
+
     private static async Task<Guid> ImportAsync(
         IDbContextFactory<MemeSearcherDbContext> factory, EspeakPhonemizer phonemizer, string tempDir, string fileName, string srtBody)
     {

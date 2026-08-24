@@ -55,7 +55,12 @@
                                  TextNormalizer before phonemization, so it isn't fit to stand in for
                                  the line in general - only swapped in when a match actually resolved
                                  to specific words, since pointing at the right word matters more
-                                 there than exact surface form (#26 Part 2). -->
+                                 there than exact surface form (#26 Part 2). Deliberately not
+                                 clickable itself (#26 part 3): a click target spanning the whole line
+                                 inside a ListBox row is too easy to hit by accident while just
+                                 reading, and a stray seeded search would blow away whatever result
+                                 set/assembly draft the user had open to get here. Only the
+                                 individually-sized word buttons below seed a search. -->
                             <TextBlock Text="{Binding Text}" TextWrapping="Wrap" Foreground="{StaticResource TextPrimary}"
                                        IsVisible="{Binding !HasWordHighlights}" />
                             <ItemsControl ItemsSource="{Binding Words}" IsVisible="{Binding HasWordHighlights}">
@@ -66,9 +71,11 @@
                                 </ItemsControl.ItemsPanel>
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate x:DataType="vm:TranscriptWordViewModel">
-                                        <Border Classes="TranscriptWord" Classes.Highlighted="{Binding IsHighlighted}" Margin="0,0,4,0" Padding="2,0">
-                                            <TextBlock Text="{Binding Text}" TextWrapping="Wrap" Foreground="{StaticResource TextPrimary}" />
-                                        </Border>
+                                        <Button Classes="TranscriptWord" Classes.Highlighted="{Binding IsHighlighted}" Margin="0,0,4,0"
+                                                Command="{Binding #Root.((vm:TranscriptPanelViewModel)DataContext).SeedSearchFromWordCommand}"
+                                                CommandParameter="{Binding}">
+                                            <TextBlock Text="{Binding Text}" TextWrapping="Wrap" />
+                                        </Button>
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>

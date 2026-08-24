@@ -90,6 +90,11 @@ public partial class MainWindowViewModel : ViewModelBase
         WireZoneCount(RightPanels, v => HasRightPanels = v);
         WireZoneCount(BottomPanels, v => HasBottomPanels = v);
 
+        // #26 part 3: the transcript panel doesn't know which search tab is active, so it just
+        // raises a plain event when a word/cue is clicked - this is the one place that already
+        // owns both ends (ActiveSearchTab and TranscriptPanel) to complete the loop.
+        TranscriptPanel.SeedSearchRequested += OnSeedSearchRequested;
+
         // Milestone 13: an open search tab's scope indicator must reflect a checkbox toggled in
         // the (always-visible) library panel *before* the next search runs, not only after -
         // otherwise "no matches" from an unnoticed scope filter is indistinguishable from a query
@@ -161,6 +166,7 @@ public partial class MainWindowViewModel : ViewModelBase
 
         Inspector.Show(value?.SelectedResult);
         TranscriptPanel.Show(value?.SelectedResult);
+        TranscriptPanel.ShowComponent(value?.SelectedComponent);
     }
 
     private void OnActiveTabPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -170,6 +176,24 @@ public partial class MainWindowViewModel : ViewModelBase
             Inspector.Show(_inspectedTab?.SelectedResult);
             TranscriptPanel.Show(_inspectedTab?.SelectedResult);
         }
+        else if (e.PropertyName == nameof(SearchViewModel.SelectedComponent))
+        {
+            // #26 part 3: composite mode's own click signal, wired the same way SelectedResult is -
+            // one click, one meaning, this time focusing just the clicked component's own media.
+            TranscriptPanel.ShowComponent(_inspectedTab?.SelectedComponent);
+        }
+    }
+
+    /// <summary>#26 part 3: sets the active tab's query to the clicked word/cue text and runs it - the same "set QueryText then search" shape RerunSearchAsync already uses for history entries.</summary>
+    private void OnSeedSearchRequested(object? sender, string queryText)
+    {
+        if (ActiveSearchTab is not { } tab)
+        {
+            return;
+        }
+
+        tab.QueryText = queryText;
+        tab.SearchCommand.Execute(null);
     }
 
     [RelayCommand]

@@ -356,7 +356,13 @@ public class CompositeSearchService(
                 options)
             : 0.0;
 
-        return new CompositeMatchComponent(mediaId, startSeconds, endSeconds, sourceText, ipa, phonemes, componentScore, queryStart, queryEnd);
+        var matchedPhoneDetails = group
+            .Select(g => g.Entry)
+            .Where(e => !e.Token.IsBoundary)
+            .Select(e => new MatchedPhone(e.Token.Symbol, e.StartSeconds, e.EndSeconds, e.IsPhoneLevelAligned, e.SegmentId, e.WordId))
+            .ToList();
+
+        return new CompositeMatchComponent(mediaId, startSeconds, endSeconds, sourceText, ipa, phonemes, componentScore, queryStart, queryEnd, matchedPhoneDetails);
     }
 
     private static double ScoreOf(double cost, int normalizeBy, PhoneticSearchOptions options) =>

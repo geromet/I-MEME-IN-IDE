@@ -97,6 +97,14 @@ public class CompositeSearchServiceTests : IDisposable
 
         // Coverage: the two components should cover disjoint, non-decreasing query ranges.
         Assert.True(best.Components[0].QueryEnd <= best.Components[1].QueryStart + 1);
+
+        // #26 part 3: each component carries its own SegmentId/WordId provenance, so the transcript
+        // viewer can open and highlight just that component's own media when it's the one clicked.
+        Assert.NotEmpty(best.Components[0].MatchedPhoneDetails);
+        Assert.All(best.Components[0].MatchedPhoneDetails, p => Assert.NotNull(p.SegmentId));
+        Assert.NotEmpty(best.Components[1].MatchedPhoneDetails);
+        Assert.All(best.Components[1].MatchedPhoneDetails, p => Assert.NotNull(p.SegmentId));
+        Assert.NotEqual(best.Components[0].MatchedPhoneDetails[0].SegmentId, best.Components[1].MatchedPhoneDetails[0].SegmentId);
     }
 
     /// <summary>

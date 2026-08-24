@@ -15,8 +15,15 @@ public record CompositeMatchComponent(
     IReadOnlyList<string> Phonemes,
     double Score,
     int QueryStart,
-    int QueryEnd)
-    : MatchComponent(MediaId, StartSeconds, EndSeconds, SourceText, Ipa, Phonemes, Score);
+    int QueryEnd,
+    // #26 part 3: same SegmentId/WordId provenance SearchResult's own MatchedPhoneDetails carries -
+    // lets clicking one component of a composite result open and highlight that component's own
+    // transcript, the same way a single-source result already does.
+    IReadOnlyList<MatchedPhone>? MatchedPhoneDetails = null)
+    : MatchComponent(MediaId, StartSeconds, EndSeconds, SourceText, Ipa, Phonemes, Score)
+{
+    public IReadOnlyList<MatchedPhone> MatchedPhoneDetails { get; init; } = MatchedPhoneDetails ?? [];
+}
 
 /// <summary>
 /// A match assembled from multiple source files (addendum §15-21) - kept as a separate type from

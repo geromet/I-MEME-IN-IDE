@@ -251,6 +251,80 @@ public class TranscriptPanelViewModelTests : IDisposable
         Assert.False(panel.HasTabs);
     }
 
+    /// <summary>#26 part 3, "reverse direction": clicking a matched word raises SeedSearchRequested with that word's exact text, not the normalized cue text.</summary>
+    [Fact]
+    public async Task SeedSearchFromWordCommand_RaisesSeedSearchRequestedWithTheWordsText()
+    {
+        var setup = await TrySetUpAsync();
+        if (setup is null)
+        {
+            return;
+        }
+
+        var (phonemizer, factory) = setup.Value;
+        await ImportAndRealignAsync(factory, phonemizer, _tempDir);
+
+        var searchService = new PhoneticSearchService(factory, phonemizer, new InMemoryQueryPhonemizationCache());
+        var results = await searchService.SearchAsync("hello", "en-US", new SearchScope.AllIndexedMedia());
+
+        var panel = new TranscriptPanelViewModel(new TranscriptViewService(factory), new LibraryService(factory));
+        await panel.ShowAsync(MakeRow(results.OrderByDescending(r => r.Score).First()));
+
+        var cue = Assert.Single(panel.Tabs).Cues[0];
+        var world = Assert.Single(cue.Words, w => w.Text == "world");
+
+        string? seeded = null;
+        panel.SeedSearchRequested += (_, text) => seeded = text;
+        panel.SeedSearchFromWordCommand.Execute(world);
+
+        Assert.Equal("world", seeded);
+    }
+
+    /// <summary>#26 part 3's composite-click decision: a component opens (and highlights) only its own media, not every other contributing transcript.</summary>
+    [Fact]
+    public async Task ShowComponent_OpensOnlyThatComponentsOwnTranscript()
+    {
+        var setup = await TrySetUpAsync();
+        if (setup is null)
+        {
+            return;
+        }
+
+        var (phonemizer, factory) = setup.Value;
+        var mediaId = await ImportAsync(factory, phonemizer, _tempDir);
+
+        var searchService = new PhoneticSearchService(factory, phonemizer, new InMemoryQueryPhonemizationCache());
+        var results = await searchService.SearchAsync("hello", "en-US", new SearchScope.AllIndexedMedia());
+        var best = results.OrderByDescending(r => r.Score).First();
+
+        var component = new CompositeComponentRowViewModel(
+            new CompositeMatchComponent(
+                mediaId, best.StartSeconds, best.EndSeconds, best.SourceText, best.Ipa, best.Phonemes,
+                best.Score, best.QueryStart, best.QueryEnd, best.MatchedPhoneDetails),
+            "clip.srt", null);
+
+        var panel = new TranscriptPanelViewModel(new TranscriptViewService(factory), new LibraryService(factory));
+        await panel.ShowComponentAsync(component);
+
+        var tab = Assert.Single(panel.Tabs);
+        Assert.Equal(mediaId, tab.MediaId);
+        Assert.True(tab.Cues[0].IsHighlighted);
+    }
+
+    [Fact]
+    public void ShowComponent_Null_DoesNotOpenAnyTab()
+    {
+        var factory = new ServiceCollection()
+            .AddDbContextFactory<MemeSearcherDbContext>(o => o.UseSqlite($"Data Source={_dbPath}"))
+            .BuildServiceProvider()
+            .GetRequiredService<IDbContextFactory<MemeSearcherDbContext>>();
+        var panel = new TranscriptPanelViewModel(new TranscriptViewService(factory), new LibraryService(factory));
+
+        panel.ShowComponent(null);
+
+        Assert.Empty(panel.Tabs);
+    }
+
     public void Dispose()
     {
         try

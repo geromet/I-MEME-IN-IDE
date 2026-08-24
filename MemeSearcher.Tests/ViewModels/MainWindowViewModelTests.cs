@@ -311,6 +311,48 @@ public class MainWindowViewModelTests : IDisposable
         Assert.Same(inspectorSlot, Assert.Single(viewModel.RightPanels));
     }
 
+    /// <summary>
+    /// #26 part 3, "reverse direction": TranscriptPanel raising SeedSearchRequested (as clicking a
+    /// matched word does) must reach the *active* tab, exactly the same way the transcript panel's
+    /// own Show(SelectedResult) call is driven by whichever tab is active - this is the wiring
+    /// MainWindowViewModel owns because it's the one place with both ends. A synthetic
+    /// TranscriptWordViewModel is enough here - which words are clickable, and what timing makes one
+    /// trustworthy, is TranscriptPanelViewModel/TranscriptTabViewModel's own concern, already covered
+    /// in their own tests; this one is purely about the fan-out.
+    /// </summary>
+    [Fact]
+    public async Task SeedSearchRequestedFromTranscriptPanel_RunsItOnTheActiveTab()
+    {
+        var setup = await TrySetUpAsync();
+        if (setup is null)
+        {
+            return;
+        }
+
+        var (viewModel, dbContextFactory, phonemizer) = setup.Value;
+
+        await ImportAsync(dbContextFactory, phonemizer, _tempDir, "a.srt", """
+            1
+            00:00:01,000 --> 00:00:02,000
+            hello world
+
+            """);
+
+        var tab = viewModel.ActiveSearchTab!;
+        Assert.Equal("", tab.QueryText);
+
+        var word = new TranscriptWordViewModel(new TranscriptWord(Guid.NewGuid(), "hello", IsTimingInterpolated: false));
+        viewModel.TranscriptPanel.SeedSearchFromWordCommand.Execute(word);
+
+        for (var i = 0; i < 50 && tab.Results.Count == 0; i++)
+        {
+            await Task.Delay(10);
+        }
+
+        Assert.Equal("hello", tab.QueryText);
+        Assert.Single(tab.Results);
+    }
+
     public void Dispose()
     {
         try
