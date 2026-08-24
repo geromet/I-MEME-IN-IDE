@@ -36,6 +36,10 @@ public partial class SearchResultRowViewModel : ObservableObject
     /// all three previously operated on a stand-in zero and silently did the wrong thing.
     /// </summary>
     public bool HasTiming => StartSeconds is not null && EndSeconds is not null;
+
+    /// <summary>#25: raw score, alongside ScoreDisplay's formatted text - needed so the results list can sort by score as one of two axes rather than only ever trusting the server's default order.</summary>
+    public double Score { get; }
+
     public string ScoreDisplay { get; }
     public string TimeRangeDisplay { get; }
     public string SourceText { get; }
@@ -90,6 +94,7 @@ public partial class SearchResultRowViewModel : ObservableObject
         MediaId = result.MediaId;
         StartSeconds = result.StartSeconds;
         EndSeconds = result.EndSeconds;
+        Score = result.Score;
         ScoreDisplay = $"{result.Score:P0}";
         // Say "no timing" rather than printing 00:00 - a result from an untimed transcript is not
         // a result at the start of the file, and rendering them identically is the bug (#32).

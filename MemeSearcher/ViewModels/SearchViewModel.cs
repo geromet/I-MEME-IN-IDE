@@ -73,6 +73,28 @@ public partial class SearchViewModel(
 
     public ObservableCollection<CompositeSearchResultRowViewModel> CompositeResults { get; } = [];
 
+    /// <summary>#25: the unfiltered, server-ordered (by Score) single-source results from the last search - Results is re-derived from this every time SortMode or MinimumCoverage changes, rather than the search re-running.</summary>
+    private List<SearchResultRowViewModel> _allResults = [];
+
+    public static IReadOnlyList<ResultSortMode> SortModeOptions { get; } = Enum.GetValues<ResultSortMode>();
+
+    /// <summary>#25 exit criterion 2: sorting by coverage instead of score, without re-running the search.</summary>
+    [ObservableProperty]
+    private ResultSortMode _sortMode = ResultSortMode.Score;
+
+    partial void OnSortModeChanged(ResultSortMode value) => ApplyResultSortAndFilter();
+
+    /// <summary>
+    /// #25 exit criterion 2: hides results below this fraction of the query covered. 0 shows
+    /// everything (the default - filtering is opt-in, matching how scoping already works in this
+    /// app). Not the same axis as Score's own MinimumScore threshold: a result can score well by
+    /// being cheap-per-phone while covering very little of the query.
+    /// </summary>
+    [ObservableProperty]
+    private double _minimumCoverage;
+
+    partial void OnMinimumCoverageChanged(double value) => ApplyResultSortAndFilter();
+
     /// <summary>Milestone 15 (#15): the result the shared Inspector panel currently shows, bound to the results ListBox's SelectedItem.</summary>
     [ObservableProperty]
     private SearchResultRowViewModel? _selectedResult;
@@ -210,27 +232,44 @@ public partial class SearchViewModel(
         var mediaPaths = await libraryService.GetPathsAsync(results.Select(r => r.MediaId));
 
         SelectedResult = null;
-        Results.Clear();
-        foreach (var result in results)
-        {
-            var row = new SearchResultRowViewModel(result, playerLauncher, clipboard, clipExtractor, filePicker)
+        _allResults = results
+            .Select(result => new SearchResultRowViewModel(result, playerLauncher, clipboard, clipExtractor, filePicker)
             {
                 MediaPath = mediaPaths.GetValueOrDefault(result.MediaId),
-            };
+            })
+            .ToList();
+        ApplyResultSortAndFilter();
+
+        StatusMessage = _allResults.Count > 0
+            ? $"{_allResults.Count} result(s)."
+            : "No matches found.";
+
+        return _allResults.Count;
+    }
+
+    /// <summary>
+    /// #25: re-derives the displayed Results from _allResults per SortMode/MinimumCoverage, without
+    /// re-running the search - Score order is exactly what the server already returned (re-sorting
+    /// by the same key the server used would just be redundant work), Coverage order is computed
+    /// client-side since the server has no notion of it to sort by.
+    /// </summary>
+    private void ApplyResultSortAndFilter()
+    {
+        var previousSelection = SelectedResult;
+        Results.Clear();
+        foreach (var row in ResultSortFilter.Apply(_allResults, SortMode, MinimumCoverage))
+        {
             Results.Add(row);
         }
 
-        StatusMessage = Results.Count > 0
-            ? $"{Results.Count} result(s)."
-            : "No matches found.";
-
-        return Results.Count;
+        SelectedResult = previousSelection is not null && Results.Contains(previousSelection) ? previousSelection : null;
     }
 
     private async Task<int> SearchCompositeAsync(SearchScope scope)
     {
         SelectedResult = null;
         Results.Clear();
+        _allResults = [];
 
         var results = await compositeSearchService.SearchAsync(QueryText, Language, scope);
         var allMediaIds = results.SelectMany(r => r.Components.Select(c => c.MediaId)).Distinct().ToList();

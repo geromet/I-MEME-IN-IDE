@@ -57,6 +57,23 @@
                     IsVisible="{Binding CanWidenToFullCorpus}" />
         </StackPanel>
 
+        <!-- #25 exit criterion 2: coverage as a first-class sort/filter axis alongside score - a
+             normalized score alone conflates "matched a little, well" with "matched a lot,
+             roughly". Single-source only for now; composite results have no per-component
+             coverage strip yet. -->
+        <StackPanel Grid.Row="5" Orientation="Horizontal" Spacing="12" Margin="0,6,0,0"
+                    IsVisible="{Binding !IsCompositeMode}">
+            <StackPanel Orientation="Horizontal" Spacing="4">
+                <TextBlock Classes="FieldLabel" Text="Sort:" VerticalAlignment="Center" />
+                <ComboBox SelectedItem="{Binding SortMode}" ItemsSource="{Binding SortModeOptions}" />
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Spacing="4">
+                <TextBlock Classes="FieldLabel" Text="Min. coverage:" VerticalAlignment="Center" />
+                <Slider Width="120" Minimum="0" Maximum="1" Value="{Binding MinimumCoverage}" VerticalAlignment="Center" />
+                <TextBlock Classes="FieldLabel" Text="{Binding MinimumCoverage, StringFormat='{}{0:P0}'}" VerticalAlignment="Center" />
+            </StackPanel>
+        </StackPanel>
+
         <ListBox Grid.Row="6" ItemsSource="{Binding Results}" SelectedItem="{Binding SelectedResult}" IsVisible="{Binding !IsCompositeMode}">
             <ListBox.ItemTemplate>
                 <DataTemplate x:DataType="vm:SearchResultRowViewModel">
