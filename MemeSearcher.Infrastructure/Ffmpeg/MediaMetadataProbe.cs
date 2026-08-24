@@ -41,7 +41,7 @@ public class MediaMetadataProbe(FFprobeToolLocator toolLocator)
         }
 
         var stdout = await process.StandardOutput.ReadToEndAsync(cancellationToken);
-        await process.WaitForExitAsync(cancellationToken);
+        await ProcessRunner.WaitForExitAndKillOnCancelAsync(process, cancellationToken);
 
         if (process.ExitCode != 0)
         {

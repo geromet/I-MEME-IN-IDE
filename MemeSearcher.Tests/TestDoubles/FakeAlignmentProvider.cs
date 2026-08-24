@@ -16,12 +16,15 @@ public class FakeAlignmentProvider(
     public PhoneAlphabet? PhoneAlphabet => phoneAlphabet;
 
     public string? LastMediaPath { get; private set; }
-    public string? LastTranscriptText { get; private set; }
+    public IReadOnlyList<AlignmentUtterance>? LastUtterances { get; private set; }
+    public double LastTotalDurationSeconds { get; private set; }
 
-    public Task<AlignmentResult> AlignAsync(string mediaPath, string transcriptText, CancellationToken cancellationToken = default)
+    public Task<AlignmentResult> AlignAsync(
+        string mediaPath, IReadOnlyList<AlignmentUtterance> utterances, double totalDurationSeconds, CancellationToken cancellationToken = default)
     {
         LastMediaPath = mediaPath;
-        LastTranscriptText = transcriptText;
+        LastUtterances = utterances;
+        LastTotalDurationSeconds = totalDurationSeconds;
         return Task.FromResult(result);
     }
 }

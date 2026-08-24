@@ -53,4 +53,12 @@ public class Media
     /// media doesn't silently narrow the scope the user already had - only an explicit uncheck does.
     /// </summary>
     public bool IsSelectedForSearch { get; set; } = true;
+
+    /// <summary>
+    /// When a realignment was last *attempted* against this media, regardless of outcome (#33).
+    /// Distinct from <see cref="UpdatedAt"/>, which only moves on success - without this, a failed
+    /// realign left no trace at all, so "the timestamp hasn't changed" was wrongly read as "never
+    /// clicked" rather than "ran and failed."
+    /// </summary>
+    public DateTimeOffset? LastRealignAttemptAt { get; set; }
 }

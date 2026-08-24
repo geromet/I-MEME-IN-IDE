@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text.RegularExpressions;
 using MemeSearcher.Core.Interfaces;
 using MemeSearcher.Core.Phonetics;
 using MemeSearcher.Core.Settings;
@@ -20,7 +21,7 @@ namespace MemeSearcher.Infrastructure.Alignment;
 /// english_us_arpa`) - MFA does not auto-download these on first use. Language is hardcoded to
 /// en-US for now, matching the rest of the project's current "en-US only" scope.
 /// </summary>
-public class MfaAlignmentProvider(
+public partial class MfaAlignmentProvider(
     MfaToolLocator toolLocator,
     ISettingsStore settings,
     MfaSettings mfaSettings) : IAlignmentProvider
@@ -42,7 +43,8 @@ public class MfaAlignmentProvider(
             ? Core.Phonetics.PhoneAlphabet.Arpabet
             : Core.Phonetics.PhoneAlphabet.Ipa;
 
-    public async Task<AlignmentResult> AlignAsync(string mediaPath, string transcriptText, CancellationToken cancellationToken = default)
+    public async Task<AlignmentResult> AlignAsync(
+        string mediaPath, IReadOnlyList<AlignmentUtterance> utterances, double totalDurationSeconds, CancellationToken cancellationToken = default)
     {
         var status = await toolLocator.LocateAsync(cancellationToken);
         if (!status.IsInstalled)
@@ -64,10 +66,17 @@ public class MfaAlignmentProvider(
         {
             var baseName = Path.GetFileNameWithoutExtension(mediaPath);
             var corpusMediaPath = Path.Combine(corpusDir, baseName + Path.GetExtension(mediaPath));
-            var corpusLabPath = Path.Combine(corpusDir, baseName + ".lab");
+            var corpusTextGridPath = Path.Combine(corpusDir, baseName + ".TextGrid");
 
             LinkOrCopy(mediaPath, corpusMediaPath);
-            await File.WriteAllTextAsync(corpusLabPath, transcriptText, cancellationToken);
+
+            // #33: a TextGrid-corpus input, segmented into the transcript's own utterances against
+            // the intact audio file - not one `.lab` covering the whole recording as a single
+            // utterance. A multi-thousand-word single "utterance" gave MFA's beam search one
+            // enormous path with no intermediate anchors, so one unrecoverable stretch anywhere in
+            // a 15-minute file failed the entire file rather than just that utterance.
+            var textGrid = MfaUtteranceCorpusWriter.Write(utterances, totalDurationSeconds);
+            await File.WriteAllTextAsync(corpusTextGridPath, textGrid, cancellationToken);
 
             await RunMfaAsync(
                 status,
@@ -102,12 +111,12 @@ public class MfaAlignmentProvider(
     {
         var tiers = TextGridParser.Parse(textGridContent);
 
-        var words = tiers.GetValueOrDefault("words", [])
+        var words = FindTier(tiers, "words")
             .Where(i => !string.IsNullOrWhiteSpace(i.Text))
             .Select(i => new AlignedWord(i.Text, i.StartSeconds, i.EndSeconds))
             .ToList();
 
-        var phoneTier = tiers.GetValueOrDefault("phones", []);
+        var phoneTier = FindTier(tiers, "phones");
         IReadOnlyList<AlignedPhone>? phones = phoneTier.Count > 0
             ? phoneTier
                 .Where(i => !IsSilenceMarker(i.Text))
@@ -116,6 +125,24 @@ public class MfaAlignmentProvider(
             : null;
 
         return new AlignmentResult(words, phones);
+    }
+
+    /// <summary>
+    /// #33: aligning against a TextGrid-corpus input (instead of a `.lab`) makes MFA treat the
+    /// input tier's name as a speaker label, and a speaker-labelled corpus's output tiers are
+    /// named "&lt;speaker&gt; - words"/"&lt;speaker&gt; - phones" rather than the bare "words"/
+    /// "phones" a single `.lab` file produced. Matched by suffix (and the bare name, for a
+    /// `.lab`-style corpus) rather than hardcoding the exact prefix MFA would use for our fixed
+    /// "utterances" tier name, since that convention isn't verifiable without a real MFA install.
+    /// </summary>
+    private static List<TextGridParser.Interval> FindTier(
+        IReadOnlyDictionary<string, List<TextGridParser.Interval>> tiers, string tierName)
+    {
+        var key = tiers.Keys.FirstOrDefault(k =>
+            k.Equals(tierName, StringComparison.OrdinalIgnoreCase) ||
+            k.EndsWith(" - " + tierName, StringComparison.OrdinalIgnoreCase));
+
+        return key is not null ? tiers[key] : [];
     }
 
     private static bool IsSilenceMarker(string text) =>
@@ -206,10 +233,31 @@ public class MfaAlignmentProvider(
             }
         }
 
+        // #33: a plain Python traceback (no box) has no border to find - MFA's NoAlignmentsError
+        // and friends print this way, and the whole ~2KB traceback was passing through verbatim
+        // before this, with the actual "NoAlignmentsError: ..." sentence buried at the very end.
+        // A traceback's final exception always looks like "SomeError: message", optionally
+        // wrapping onto further unindented lines with no blank line in between - both are kept,
+        // everything before the exception line (the call stack) is dropped.
+        var exceptionLineIndex = lines.FindLastIndex(line => ExceptionLine().IsMatch(line.TrimStart()));
+
+        if (exceptionLineIndex >= 0)
+        {
+            var tail = lines
+                .Skip(exceptionLineIndex)
+                .Select(line => line.Trim())
+                .Where(line => line.Length > 0);
+
+            return string.Join(" ", tail);
+        }
+
         var fallback = lines.Select(StripBorders).Where(line => line.Length > 0).ToList();
 
-        return fallback.Count > 0 ? string.Join(" ", fallback) : "no error output";
+        return fallback.Count > 0 ? fallback[^1] : "no error output";
     }
+
+    [GeneratedRegex(@"^[A-Za-z_][\w.]*(Error|Exception)\s*:\s*.+")]
+    private static partial Regex ExceptionLine();
 
     private static string StripBorders(string line) =>
         line.Trim().Trim('\u2502', '\u256d', '\u2570', '\u256e', '\u256f', '\u2500').Trim();

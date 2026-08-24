@@ -113,7 +113,7 @@ public class EspeakPhonemizer(IExternalToolLocator toolLocator) : IPhonemizer
         var stdoutTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
         var stderrTask = process.StandardError.ReadToEndAsync(cancellationToken);
 
-        await process.WaitForExitAsync(cancellationToken);
+        await ProcessRunner.WaitForExitAndKillOnCancelAsync(process, cancellationToken);
 
         var stdout = await stdoutTask;
 

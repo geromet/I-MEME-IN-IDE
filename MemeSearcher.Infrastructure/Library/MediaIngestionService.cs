@@ -139,9 +139,31 @@ public class MediaIngestionService(
         }
 
         var orderedSegments = transcripts.SelectMany(t => t.Segments).OrderBy(s => s.Sequence).ToList();
-        var fullText = string.Join(" ", orderedSegments.Select(s => s.Text));
 
-        var alignment = await alignmentProvider.AlignAsync(media.MediaFilePath, fullText, cancellationToken);
+        // #33: segment-level utterances, not one string spanning the whole recording - see
+        // AlignmentUtterance's own doc comment for why. A segment without its own timing (#32 -
+        // a transcript that never had any) can't be placed as its own utterance; if literally none
+        // of them can, the whole transcript becomes a single utterance spanning the media's full
+        // duration, which reproduces this method's pre-#33 behaviour rather than aligning nothing.
+        var timedSegments = orderedSegments.Where(s => s.StartSeconds is not null && s.EndSeconds is not null).ToList();
+        var utterances = timedSegments.Count > 0
+            ? timedSegments.Select(s => new AlignmentUtterance(s.StartSeconds!.Value, s.EndSeconds!.Value, s.Text)).ToList()
+            : [new AlignmentUtterance(0, media.Duration.TotalSeconds, string.Join(" ", orderedSegments.Select(s => s.Text)))];
+
+        var totalDurationSeconds = media.Duration.TotalSeconds > 0
+            ? media.Duration.TotalSeconds
+            : timedSegments.Count > 0
+                ? timedSegments.Max(s => s.EndSeconds!.Value)
+                : throw new InvalidOperationException(
+                    "Media has no known duration and no segment has its own timing - cannot realign without a time span to align against.");
+
+        // Recorded before the alignment attempt (which can run for minutes and can fail) rather
+        // than only on success - a failed realign was previously indistinguishable in the database
+        // from one that was never attempted at all, which cost real diagnostic time (#33).
+        media.LastRealignAttemptAt = DateTimeOffset.UtcNow;
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        var alignment = await alignmentProvider.AlignAsync(media.MediaFilePath, utterances, totalDurationSeconds, cancellationToken);
 
         var phoneAlphabet = ValidateDeclaredAlphabet(alignment);
 

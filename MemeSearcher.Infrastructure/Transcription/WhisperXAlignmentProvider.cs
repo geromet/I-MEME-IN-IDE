@@ -31,7 +31,8 @@ public class WhisperXAlignmentProvider(WhisperXToolLocator toolLocator) : IAlign
     // Word-level alignment only - it produces no phones, so it has no phone alphabet (#18).
     public PhoneAlphabet? PhoneAlphabet => null;
 
-    public async Task<AlignmentResult> AlignAsync(string mediaPath, string transcriptText, CancellationToken cancellationToken = default)
+    public async Task<AlignmentResult> AlignAsync(
+        string mediaPath, IReadOnlyList<AlignmentUtterance> utterances, double totalDurationSeconds, CancellationToken cancellationToken = default)
     {
         var status = await toolLocator.LocateAsync(cancellationToken);
         if (!status.IsInstalled)
@@ -95,7 +96,7 @@ public class WhisperXAlignmentProvider(WhisperXToolLocator toolLocator) : IAlign
             ?? throw new InvalidOperationException($"Failed to start '{status.ExecutablePath}'.");
 
         var stderrTask = process.StandardError.ReadToEndAsync(cancellationToken);
-        await process.WaitForExitAsync(cancellationToken);
+        await ProcessRunner.WaitForExitAndKillOnCancelAsync(process, cancellationToken);
 
         if (process.ExitCode != 0)
         {

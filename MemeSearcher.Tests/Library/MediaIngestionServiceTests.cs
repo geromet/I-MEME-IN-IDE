@@ -317,7 +317,10 @@ public class MediaIngestionServiceTests : IDisposable
         Assert.Equal(2, result.UpdatedWordCount);
         Assert.Equal(8, result.UpdatedPhoneCount);
         Assert.Equal(mediaPath, fakeAlignment.LastMediaPath);
-        Assert.Equal("hello world", fakeAlignment.LastTranscriptText);
+        var utterance = Assert.Single(fakeAlignment.LastUtterances!);
+        Assert.Equal("hello world", utterance.Text);
+        Assert.Equal(1.0, utterance.StartSeconds);
+        Assert.Equal(3.0, utterance.EndSeconds);
 
         var storedTranscript = await context.Transcripts
             .Include(t => t.Segments)
@@ -333,6 +336,168 @@ public class MediaIngestionServiceTests : IDisposable
 
         var helloPhones = words[0].Phones.OrderBy(p => p.Sequence).Select(p => p.Symbol).ToList();
         Assert.Equal(["HH", "AH0", "L", "OW1"], helloPhones);
+    }
+
+    /// <summary>
+    /// #33: the actual fix - a multi-segment transcript must reach the alignment provider as one
+    /// utterance per segment (each in its own whole-file time span), not one string spanning the
+    /// whole recording. This is what turns a single monolithic-utterance failure mode into
+    /// per-utterance failures.
+    /// </summary>
+    [Fact]
+    public async Task RealignAsync_WithMultipleSegments_PassesOneUtterancePerSegmentNotOneJoinedString()
+    {
+        var mediaPath = Path.Combine(_tempDir, "clip.mp4");
+        await File.WriteAllTextAsync(mediaPath, "not a real video, just needs to exist");
+        var srtPath = Path.Combine(_tempDir, "clip.srt");
+        await File.WriteAllTextAsync(srtPath, """
+            1
+            00:00:01,000 --> 00:00:03,000
+            hello there
+
+            2
+            00:00:05,000 --> 00:00:07,000
+            general kenobi
+
+            """);
+
+        var phonemizer = await CreatePhonemizerIfAvailableAsync();
+        if (phonemizer is null)
+        {
+            return;
+        }
+
+        var fakeAlignment = new FakeAlignmentProvider(new AlignmentResult([]));
+
+        await using (var importContext = CreateContext())
+        {
+            var importService = new MediaIngestionService(
+                importContext, TranscriptParserFactory.CreateDefault(), phonemizer,
+                new UnusedTranscriptionProvider(), new MediaMetadataProbe(new FFprobeToolLocator()));
+            await importService.ImportAsync(new MediaIngestionRequest(mediaPath, srtPath, "en-US"));
+        }
+
+        await using var context = CreateContext();
+        var imported = await context.Media.SingleAsync();
+
+        var service = new MediaIngestionService(
+            context, TranscriptParserFactory.CreateDefault(), phonemizer,
+            new UnusedTranscriptionProvider(), new MediaMetadataProbe(new FFprobeToolLocator()), fakeAlignment);
+
+        await service.RealignAsync(imported.Id);
+
+        Assert.Equal(2, fakeAlignment.LastUtterances!.Count);
+        Assert.Equal((1.0, 3.0, "hello there"), (fakeAlignment.LastUtterances[0].StartSeconds, fakeAlignment.LastUtterances[0].EndSeconds, fakeAlignment.LastUtterances[0].Text));
+        Assert.Equal((5.0, 7.0, "general kenobi"), (fakeAlignment.LastUtterances[1].StartSeconds, fakeAlignment.LastUtterances[1].EndSeconds, fakeAlignment.LastUtterances[1].Text));
+    }
+
+    /// <summary>Exit criterion: "a recording where one utterance genuinely cannot be aligned still yields phones for the rest."</summary>
+    [Fact]
+    public async Task RealignAsync_WhenOneUtteranceHasNoAlignedWords_StillPopulatesPhonesForTheOthers()
+    {
+        var mediaPath = Path.Combine(_tempDir, "clip.mp4");
+        await File.WriteAllTextAsync(mediaPath, "not a real video, just needs to exist");
+        var srtPath = Path.Combine(_tempDir, "clip.srt");
+        await File.WriteAllTextAsync(srtPath, """
+            1
+            00:00:01,000 --> 00:00:03,000
+            hello
+
+            2
+            00:00:05,000 --> 00:00:07,000
+            world
+
+            """);
+
+        var phonemizer = await CreatePhonemizerIfAvailableAsync();
+        if (phonemizer is null)
+        {
+            return;
+        }
+
+        // Only "world" comes back - as if MFA's beam search failed the first utterance entirely
+        // but succeeded on the second, which is exactly the partial-success shape #33 exists to
+        // make possible.
+        var fakeAlignment = new FakeAlignmentProvider(new AlignmentResult(
+            [new("world", 5.2, 5.6)],
+            [new("W", 5.2, 5.4), new("D", 5.4, 5.6)]));
+
+        await using (var importContext = CreateContext())
+        {
+            var importService = new MediaIngestionService(
+                importContext, TranscriptParserFactory.CreateDefault(), phonemizer,
+                new UnusedTranscriptionProvider(), new MediaMetadataProbe(new FFprobeToolLocator()));
+            await importService.ImportAsync(new MediaIngestionRequest(mediaPath, srtPath, "en-US"));
+        }
+
+        await using var context = CreateContext();
+        var imported = await context.Media.SingleAsync();
+
+        var service = new MediaIngestionService(
+            context, TranscriptParserFactory.CreateDefault(), phonemizer,
+            new UnusedTranscriptionProvider(), new MediaMetadataProbe(new FFprobeToolLocator()), fakeAlignment);
+
+        var result = await service.RealignAsync(imported.Id);
+
+        Assert.True(result.UpdatedWordCount >= 1);
+        Assert.True(result.UpdatedPhoneCount > 0);
+
+        var storedTranscript = await context.Transcripts
+            .Include(t => t.Segments)
+            .ThenInclude(s => s.Words)
+            .ThenInclude(w => w.Phones)
+            .SingleAsync(t => t.MediaId == imported.Id);
+
+        var allWords = storedTranscript.Segments.SelectMany(s => s.Words).ToList();
+        var worldWord = Assert.Single(allWords, w => w.Text == "world");
+        Assert.NotEmpty(worldWord.Phones);
+    }
+
+    /// <summary>
+    /// #33's "related note": a failed realign must leave a trace even though it changes nothing
+    /// else in the database - previously indistinguishable from "never attempted."
+    /// </summary>
+    [Fact]
+    public async Task RealignAsync_WhenAlignmentThrows_StillRecordsThatAnAttemptWasMade()
+    {
+        var mediaPath = Path.Combine(_tempDir, "clip.mp4");
+        await File.WriteAllTextAsync(mediaPath, "not a real video, just needs to exist");
+        var srtPath = Path.Combine(_tempDir, "clip.srt");
+        await File.WriteAllTextAsync(srtPath, """
+            1
+            00:00:01,000 --> 00:00:03,000
+            hello world
+
+            """);
+
+        var phonemizer = await CreatePhonemizerIfAvailableAsync();
+        if (phonemizer is null)
+        {
+            return;
+        }
+
+        await using (var importContext = CreateContext())
+        {
+            var importService = new MediaIngestionService(
+                importContext, TranscriptParserFactory.CreateDefault(), phonemizer,
+                new UnusedTranscriptionProvider(), new MediaMetadataProbe(new FFprobeToolLocator()));
+            await importService.ImportAsync(new MediaIngestionRequest(mediaPath, srtPath, "en-US"));
+        }
+
+        await using var context = CreateContext();
+        var imported = await context.Media.SingleAsync();
+        Assert.Null(imported.LastRealignAttemptAt);
+
+        var throwingAlignment = new ThrowingAlignmentProvider();
+        var service = new MediaIngestionService(
+            context, TranscriptParserFactory.CreateDefault(), phonemizer,
+            new UnusedTranscriptionProvider(), new MediaMetadataProbe(new FFprobeToolLocator()), throwingAlignment);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.RealignAsync(imported.Id));
+
+        await using var verifyContext = CreateContext();
+        var afterFailure = await verifyContext.Media.SingleAsync();
+        Assert.NotNull(afterFailure.LastRealignAttemptAt);
     }
 
     [Fact]

@@ -1,3 +1,4 @@
+using MemeSearcher.Core.Interfaces;
 using MemeSearcher.Infrastructure.Processes;
 using MemeSearcher.Infrastructure.Settings;
 using MemeSearcher.Infrastructure.Transcription;
@@ -131,7 +132,7 @@ public class WhisperXTranscriptionProviderTests
         var provider = new WhisperXAlignmentProvider(locator);
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => provider.AlignAsync("/some/media.mp4", "hello world", CancellationToken.None));
+            () => provider.AlignAsync("/some/media.mp4", [new AlignmentUtterance(0, 1, "hello world")], 1, CancellationToken.None));
 
         Assert.Contains("whisperx is not available", ex.Message);
     }
