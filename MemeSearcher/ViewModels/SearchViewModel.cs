@@ -106,11 +106,28 @@ public partial class SearchViewModel(
     partial void OnGroupByCoverageChanged(bool value) => ApplyResultSortAndFilter();
 
     /// <summary>Avalonia's compiled bindings can't evaluate "&amp;&amp;" inline in a binding path - these exist so the view has something to bind IsVisible to directly.</summary>
-    public bool ShowFlatResults => !IsCompositeMode && !GroupByCoverage;
+    public bool ShowFlatResults => !IsCompositeMode && !GroupByCoverage && AssemblyDraft is null;
 
-    public bool ShowGroupedResults => !IsCompositeMode && GroupByCoverage;
+    public bool ShowGroupedResults => !IsCompositeMode && GroupByCoverage && AssemblyDraft is null;
+
+    public bool ShowAssemblyDraft => AssemblyDraft is not null;
 
     public ObservableCollection<ResultGroupViewModel> ResultGroups { get; } = [];
+
+    /// <summary>#25 exit criterion 3: the in-progress manual assembly, if the user has one open. A dedicated model (not CompositeSearchResult) - see AssemblyDraftViewModel's own doc comment for why.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowFlatResults))]
+    [NotifyPropertyChangedFor(nameof(ShowGroupedResults))]
+    [NotifyPropertyChangedFor(nameof(ShowAssemblyDraft))]
+    private AssemblyDraftViewModel? _assemblyDraft;
+
+    [RelayCommand(CanExecute = nameof(CanStartAssembly))]
+    private void StartAssembly() => AssemblyDraft = new AssemblyDraftViewModel(ResultGroups.ToList(), playerLauncher, clipExtractor, filePicker);
+
+    private bool CanStartAssembly() => ResultGroups.Count > 0;
+
+    [RelayCommand]
+    private void CloseAssembly() => AssemblyDraft = null;
 
     /// <summary>Milestone 15 (#15): the result the shared Inspector panel currently shows, bound to the results ListBox's SelectedItem.</summary>
     [ObservableProperty]
@@ -149,6 +166,9 @@ public partial class SearchViewModel(
         IsBusy = true;
         StatusMessage = "Searching...";
         CanWidenToFullCorpus = false;
+        // A new search invalidates any open draft - its slots reference rows from the previous
+        // result set, which Results/ResultGroups are about to be cleared and replaced.
+        AssemblyDraft = null;
 
         try
         {
@@ -290,6 +310,7 @@ public partial class SearchViewModel(
             }
         }
 
+        StartAssemblyCommand.NotifyCanExecuteChanged();
         SelectedResult = previousSelection is not null && Results.Contains(previousSelection) ? previousSelection : null;
     }
 
@@ -298,6 +319,7 @@ public partial class SearchViewModel(
         SelectedResult = null;
         Results.Clear();
         ResultGroups.Clear();
+        StartAssemblyCommand.NotifyCanExecuteChanged();
         _allResults = [];
 
         var results = await compositeSearchService.SearchAsync(QueryText, Language, scope);
