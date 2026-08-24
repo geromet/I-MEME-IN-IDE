@@ -21,6 +21,28 @@ public class Media
 
     public string? SourceUrl { get; set; }
     public string? Title { get; set; }
+
+    /// <summary>
+    /// yt-dlp's own video id (#27) - null for anything not sourced from yt-dlp. Deduplication keys
+    /// on this, not on SourceUrl or content hash: the same video re-downloaded at a different
+    /// quality is byte-different (ContentHash won't match) and its URL can change form (short link
+    /// vs canonical watch URL), but the id is stable.
+    /// </summary>
+    public string? VideoId { get; set; }
+
+    /// <summary>The uploading channel's display name (#27) - null for anything not sourced from yt-dlp.</summary>
+    public string? Channel { get; set; }
+
+    /// <summary>
+    /// The video's original upload date (#27) - not obtainable from yt-dlp's flat-playlist
+    /// enumeration (that mode deliberately skips per-video extraction), so this is populated only
+    /// once the video is actually downloaded, from its own full metadata. Null until then, and
+    /// always null for anything not sourced from yt-dlp.
+    /// </summary>
+    public DateOnly? UploadDate { get; set; }
+
+    /// <summary>Which form this item was actually fetched as (#27) - see YtDlpMediaKind's own doc comment. Null for anything not sourced from yt-dlp.</summary>
+    public YtDlpMediaKind? YtDlpMediaKind { get; set; }
     public TimeSpan Duration { get; set; }
     public required string Language { get; set; }
     public DateTimeOffset CreatedAt { get; set; }

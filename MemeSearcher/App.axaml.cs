@@ -17,6 +17,7 @@ using MemeSearcher.Infrastructure.Processes;
 using MemeSearcher.Infrastructure.Search;
 using MemeSearcher.Infrastructure.Settings;
 using MemeSearcher.Infrastructure.Transcription;
+using MemeSearcher.Infrastructure.YtDlp;
 using MemeSearcher.Services;
 using MemeSearcher.Shell;
 using MemeSearcher.ViewModels;
@@ -123,6 +124,12 @@ public partial class App : Application
         services.AddKeyedSingleton<IExternalToolLocator>("ffmpeg", (sp, _) => new FFmpegToolLocator(
             sp.GetRequiredService<ISettingsStore>(), sp.GetRequiredService<ExternalToolSettings>()));
         services.AddSingleton<FFmpegClipExtractor>();
+        // #27: the sixth tool #16 was written to make easy - one AddKeyedSingleton line, no
+        // companion concrete-type registration needed anywhere.
+        services.AddKeyedSingleton<IExternalToolLocator>("yt-dlp", (sp, _) => new YtDlpToolLocator(
+            sp.GetRequiredService<ISettingsStore>(), sp.GetRequiredService<ExternalToolSettings>()));
+        services.AddScoped<YtDlpPlaylistEnumerationService>();
+        services.AddScoped<YtDlpImportPlanner>();
 
         services.AddSingleton<IToolRegistry>(sp => new ToolRegistry(
             [.. sp.GetKeyedServices<IExternalToolLocator>(KeyedService.AnyKey)]));

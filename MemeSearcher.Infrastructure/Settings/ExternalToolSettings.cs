@@ -34,6 +34,7 @@ public class ExternalToolSettings : ISettingsCategory
         new("mfa", "Montreal Forced Aligner", "mfa", "Phone-level realignment. Usually installed in a conda environment."),
         new("ffmpeg", "FFmpeg", "ffmpeg", "Extracts result clips."),
         new("ffprobe", "ffprobe", "ffprobe", "Reads media duration on import."),
+        new("yt-dlp", "yt-dlp", "yt-dlp", "Enumerates and downloads YouTube channels/playlists (#27)."),
     ];
 
     private static readonly Dictionary<string, (SettingDefinition Path, SettingDefinition Environment)> Definitions =

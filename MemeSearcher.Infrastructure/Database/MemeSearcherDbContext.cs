@@ -16,6 +16,7 @@ public class MemeSearcherDbContext(DbContextOptions<MemeSearcherDbContext> optio
     public DbSet<CatalogMedia> CatalogMedia => Set<CatalogMedia>();
     public DbSet<Template> Templates => Set<Template>();
     public DbSet<TemplateVariant> TemplateVariants => Set<TemplateVariant>();
+    public DbSet<YtDlpImportFailure> YtDlpImportFailures => Set<YtDlpImportFailure>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -35,6 +36,12 @@ public class MemeSearcherDbContext(DbContextOptions<MemeSearcherDbContext> optio
             // Recognizing "I already indexed this exact file" (addendum §3) relies on this.
             entity.HasIndex(m => m.ContentHash).IsUnique();
             entity.HasIndex(m => m.Path);
+
+            // #27: unique among non-null values only (SQLite's default unique-index semantics treat
+            // every NULL as distinct from every other NULL, which is exactly right here - every
+            // non-yt-dlp import has a null VideoId, and those must not collide with each other).
+            entity.HasIndex(m => m.VideoId).IsUnique();
+            entity.Property(m => m.YtDlpMediaKind).HasConversion<string>();
 
             entity.HasMany<Transcript>()
                 .WithOne()
@@ -179,6 +186,18 @@ public class MemeSearcherDbContext(DbContextOptions<MemeSearcherDbContext> optio
                 .WithMany()
                 .HasForeignKey(v => v.TemplateId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<YtDlpImportFailure>(entity =>
+        {
+            entity.HasKey(f => f.Id);
+            entity.Property(f => f.VideoId).IsRequired();
+            entity.Property(f => f.SourceUrl).IsRequired();
+            entity.Property(f => f.Reason).IsRequired();
+
+            // A video can only be permanently-failed once at a time - a later successful import
+            // retires the row (deleted by whatever completes the import), not appended to.
+            entity.HasIndex(f => f.VideoId).IsUnique();
         });
     }
 }
