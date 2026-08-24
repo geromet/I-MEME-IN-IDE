@@ -77,6 +77,8 @@ public partial class App : Application
         services.AddSingleton(sp => new MfaSettings(
             sp.GetRequiredService<MfaModelProbe>(), sp.GetRequiredService<ISettingsStore>()));
         services.AddSingleton<ISettingsCategory>(sp => sp.GetRequiredService<MfaSettings>());
+        services.AddSingleton<YtDlpSettings>();
+        services.AddSingleton<ISettingsCategory>(sp => sp.GetRequiredService<YtDlpSettings>());
         services.AddSingleton<SettingsRegistry>();
 
         services.AddSingleton(TranscriptParserFactory.CreateDefault());
@@ -130,6 +132,7 @@ public partial class App : Application
             sp.GetRequiredService<ISettingsStore>(), sp.GetRequiredService<ExternalToolSettings>()));
         services.AddScoped<YtDlpPlaylistEnumerationService>();
         services.AddScoped<YtDlpImportPlanner>();
+        services.AddScoped<YtDlpDownloadProvider>();
 
         services.AddSingleton<IToolRegistry>(sp => new ToolRegistry(
             [.. sp.GetKeyedServices<IExternalToolLocator>(KeyedService.AnyKey)]));
