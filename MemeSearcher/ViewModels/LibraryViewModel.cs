@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using MemeSearcher.Core.Interfaces;
+using MemeSearcher.Core.Jobs;
 using MemeSearcher.Core.Settings;
 using MemeSearcher.Infrastructure.Library;
 using MemeSearcher.Infrastructure.Settings;
@@ -20,7 +21,8 @@ public partial class LibraryViewModel(
     MediaIngestionService ingestionService,
     IFilePickerService filePicker,
     ISettingsStore settings,
-    IPhoneNGramIndexService indexService) : ViewModelBase
+    IPhoneNGramIndexService indexService,
+    IJobQueue jobQueue) : ViewModelBase
 {
     // The language new imports are transcribed and phonemized in, chosen in Settings (#24).
     // Shared with SearchViewModel through the same setting, since a search must be phonemized in
@@ -33,7 +35,6 @@ public partial class LibraryViewModel(
     };
 
     [ObservableProperty]
-    [NotifyCanExecuteChangedFor(nameof(ImportCommand))]
     private bool _isBusy;
 
     /// <summary>
@@ -165,7 +166,15 @@ public partial class LibraryViewModel(
         await LoadAsync();
     }
 
-    [RelayCommand(CanExecute = nameof(CanImport))]
+    /// <summary>
+    /// Milestone 14 (#14): import is now a queued, cancellable job rather than a direct await - the
+    /// command returns as soon as the job is enqueued, so picking several files in a row queues
+    /// several imports that then run one at a time (JobQueueService's concurrency limit) instead of
+    /// blocking the UI on each in turn. Outcome/failure now show up as that job's row in the Jobs
+    /// panel rather than this panel's single StatusMessage, so a failure isn't silently overwritten
+    /// by whatever runs next.
+    /// </summary>
+    [RelayCommand]
     private async Task ImportAsync()
     {
         var files = await filePicker.PickMediaFilesAsync();
@@ -181,33 +190,26 @@ public partial class LibraryViewModel(
         }
 
         var displayName = Path.GetFileName(transcriptPath ?? mediaPath!);
+        var request = new MediaIngestionRequest(mediaPath, transcriptPath, Language);
 
-        IsBusy = true;
-        // Milestone 3: no transcript file means whisperx has to run first, which is much slower
-        // than parsing an SRT - say so rather than leaving the user staring at a generic message.
-        StatusMessage = transcriptPath is null
-            ? $"Transcribing {displayName} (this can take a while)..."
-            : $"Importing {displayName}...";
-
-        try
+        jobQueue.Enqueue(JobKind.Import, displayName, async (progress, ct) =>
         {
-            var result = await ingestionService.ImportAsync(new MediaIngestionRequest(mediaPath, transcriptPath, Language));
+            // Milestone 3: no transcript file means whisperx has to run first, which is much
+            // slower than parsing an SRT - say so rather than leaving the job looking stalled.
+            progress.Report(transcriptPath is null
+                ? $"Transcribing {displayName} (this can take a while)..."
+                : $"Importing {displayName}...");
 
-            StatusMessage = result.Outcome == MediaIngestionOutcome.Imported
+            var result = await ingestionService.ImportAsync(request, ct);
+
+            progress.Report(result.Outcome == MediaIngestionOutcome.Imported
                 ? $"Imported {displayName}."
-                : $"{displayName} was already indexed.";
-        }
-        catch (Exception ex)
-        {
-            SetError($"Import failed: {ex.Message}");
-            return;
-        }
-        finally
-        {
-            IsBusy = false;
-        }
+                : $"{displayName} was already indexed.");
 
-        await LoadAsync();
+            await LoadAsync();
+        });
+
+        StatusMessage = $"Queued: {displayName}";
     }
 
     /// <summary>
@@ -245,8 +247,6 @@ public partial class LibraryViewModel(
         return true;
     }
 
-    private bool CanImport() => !IsBusy;
-
     [RelayCommand]
     private async Task RemoveFromLibraryAsync(MediaRowViewModel row)
     {
@@ -277,35 +277,29 @@ public partial class LibraryViewModel(
     /// Milestone 12: the shell's toolbar exposes the #9 index as something the user can trigger,
     /// not just something that runs silently during import. A full rebuild, not incremental - the
     /// same operation ReindexAllAsync already performs when repairing an index, just reachable now.
+    /// Milestone 14: queued like import/realign, so it shows up (and can be cancelled) in the Jobs
+    /// panel instead of blocking the toolbar for however long the rebuild takes.
     /// </summary>
-    [RelayCommand(CanExecute = nameof(CanImport))]
-    private async Task ReindexAsync()
+    [RelayCommand]
+    private void Reindex()
     {
-        IsBusy = true;
-        StatusMessage = "Rebuilding phonetic index...";
-
-        try
+        jobQueue.Enqueue(JobKind.Reindex, "Rebuild phonetic index", async (progress, ct) =>
         {
-            var summary = await indexService.ReindexAllAsync();
-            StatusMessage = $"Rebuilt index: {summary.PostingCount} posting(s) across {summary.MediaCount} media item(s).";
-        }
-        catch (Exception ex)
-        {
-            SetError($"Reindex failed: {ex.Message}");
-        }
-        finally
-        {
-            IsBusy = false;
-        }
+            progress.Report("Rebuilding phonetic index...");
+            var summary = await indexService.ReindexAllAsync(ct);
+            progress.Report($"Rebuilt index: {summary.PostingCount} posting(s) across {summary.MediaCount} media item(s).");
+        });
     }
 
     /// <summary>
     /// Addendum §30: reprocess a media item's word/phone timing via the configured
     /// IAlignmentProvider (MFA by default - see App.axaml.cs) without retranscribing. Only
     /// available for items imported with a playable media file (RealignAsync requires it).
+    /// Milestone 14: queued and cancellable, like import/reindex - row.IsRealigning still disables
+    /// this row's button for the duration, now driven by the job's lifetime rather than a direct await.
     /// </summary>
     [RelayCommand]
-    private async Task RealignAsync(MediaRowViewModel row)
+    private void Realign(MediaRowViewModel row)
     {
         if (row.IsRealigning || !row.HasPlayableMedia)
         {
@@ -313,38 +307,38 @@ public partial class LibraryViewModel(
         }
 
         row.IsRealigning = true;
-        StatusMessage = $"Realigning \"{row.Title}\"...";
 
-        try
+        jobQueue.Enqueue(JobKind.Realign, $"Realign \"{row.Title}\"", async (progress, ct) =>
         {
-            var result = await ingestionService.RealignAsync(row.Id);
-            // Coverage, not just a count: an aligner routinely fails to place some words, and
-            // "1545 words" is meaningless without the denominator (#30).
-            // Two coverage numbers, because they fail independently: word coverage says how much
-            // of the transcript the aligner placed, phoneme coverage says how much of the result
-            // the matcher can actually reason about. A corpus can be perfectly aligned and still
-            // search badly because its phones are not modelled (#31), and that used to be
-            // invisible.
-            var coverage = result.PhonemeCoverage;
-            var phonemeNote = coverage.KnownPercent >= 99.5
-                ? ""
-                : $" {coverage.UnknownPhones} of {coverage.TotalPhones} phone(s) "
-                  + $"({100 - coverage.KnownPercent:F0}%) are not modelled by the phonetic matcher"
-                  + $" ({string.Join(" ", coverage.UnknownSymbols.Take(8))}) - search quality will suffer.";
+            try
+            {
+                progress.Report($"Realigning \"{row.Title}\"...");
+                var result = await ingestionService.RealignAsync(row.Id, ct);
 
-            StatusMessage =
-                $"Realigned \"{row.Title}\": {result.UpdatedWordCount} of {result.TotalWordCount} word(s) "
-                + $"({result.CoveragePercent:F0}%), {result.UpdatedPhoneCount} phone(s).{phonemeNote}";
-        }
-        catch (Exception ex)
-        {
-            SetError($"Realign failed for \"{row.Title}\": {ex.Message}");
-        }
-        finally
-        {
-            row.IsRealigning = false;
-        }
+                // Coverage, not just a count: an aligner routinely fails to place some words, and
+                // "1545 words" is meaningless without the denominator (#30).
+                // Two coverage numbers, because they fail independently: word coverage says how
+                // much of the transcript the aligner placed, phoneme coverage says how much of the
+                // result the matcher can actually reason about. A corpus can be perfectly aligned
+                // and still search badly because its phones are not modelled (#31), and that used
+                // to be invisible.
+                var coverage = result.PhonemeCoverage;
+                var phonemeNote = coverage.KnownPercent >= 99.5
+                    ? ""
+                    : $" {coverage.UnknownPhones} of {coverage.TotalPhones} phone(s) "
+                      + $"({100 - coverage.KnownPercent:F0}%) are not modelled by the phonetic matcher"
+                      + $" ({string.Join(" ", coverage.UnknownSymbols.Take(8))}) - search quality will suffer.";
 
-        await LoadAsync();
+                progress.Report(
+                    $"Realigned \"{row.Title}\": {result.UpdatedWordCount} of {result.TotalWordCount} word(s) "
+                    + $"({result.CoveragePercent:F0}%), {result.UpdatedPhoneCount} phone(s).{phonemeNote}");
+            }
+            finally
+            {
+                row.IsRealigning = false;
+            }
+
+            await LoadAsync();
+        });
     }
 }

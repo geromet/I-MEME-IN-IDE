@@ -56,12 +56,40 @@
 
                 <GridSplitter Grid.Row="1" Height="4" ResizeDirection="Rows" IsVisible="{Binding IsBottomPanelVisible}" />
 
-                <!-- JOBS / ERRORS - shell only, Milestone 14 fills this in. -->
+                <!-- JOBS / ERRORS (#14): live per-job rows with cancel buttons; a failed job's
+                     error stays on its own row after later jobs run, instead of being overwritten
+                     by a single shared status line. -->
                 <Border Grid.Row="2" Classes="Panel" BorderThickness="0,1,0,0" Height="180"
                         IsVisible="{Binding IsBottomPanelVisible}">
                     <DockPanel Margin="10">
                         <TextBlock DockPanel.Dock="Top" Classes="PanelHeader" Text="JOBS / ERRORS" Margin="0,0,0,8" />
-                        <TextBlock Classes="FieldLabel" Text="No background jobs yet. (Milestone 14)" />
+                        <TextBlock DockPanel.Dock="Top" Classes="FieldLabel" Text="No background jobs yet."
+                                   IsVisible="{Binding !Jobs.HasJobs}" />
+                        <ScrollViewer>
+                            <ItemsControl ItemsSource="{Binding Jobs.Jobs}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:JobRowViewModel">
+                                        <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,6">
+                                            <StackPanel Grid.Column="0">
+                                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                                    <TextBlock Text="{Binding KindDisplay}" FontWeight="Bold" />
+                                                    <TextBlock Text="{Binding Title}" />
+                                                    <TextBlock Text="{Binding StateDisplay}" Classes="FieldLabel" />
+                                                </StackPanel>
+                                                <TextBlock Classes="FieldLabel" Text="{Binding StatusMessage}"
+                                                           IsVisible="{Binding HasStatusMessage}" />
+                                                <TextBlock Foreground="{StaticResource StatusError}" TextWrapping="Wrap"
+                                                           Text="{Binding Error}" IsVisible="{Binding HasError}" />
+                                            </StackPanel>
+                                            <Button Grid.Column="1" Classes="Danger" Content="Cancel" VerticalAlignment="Top"
+                                                    IsVisible="{Binding IsCancellable}"
+                                                    Command="{Binding #Root.((vm:MainWindowViewModel)DataContext).Jobs.CancelCommand}"
+                                                    CommandParameter="{Binding}" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
                     </DockPanel>
                 </Border>
             </Grid>

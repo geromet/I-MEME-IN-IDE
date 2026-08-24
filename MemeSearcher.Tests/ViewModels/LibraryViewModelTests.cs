@@ -1,5 +1,7 @@
+using MemeSearcher.Core.Jobs;
 using MemeSearcher.Infrastructure.Database;
 using MemeSearcher.Infrastructure.Ffmpeg;
+using MemeSearcher.Infrastructure.Jobs;
 using MemeSearcher.Infrastructure.Library;
 using MemeSearcher.Infrastructure.Phonetics;
 using MemeSearcher.Infrastructure.Processes;
@@ -15,6 +17,11 @@ namespace MemeSearcher.Tests.ViewModels;
 /// <summary>
 /// Exercises LibraryViewModel against real services (real espeak-ng, a real temp-file SQLite db)
 /// with only the file picker stubbed. Skips (returns early) if espeak-ng isn't installed.
+///
+/// Milestone 14: Import/Realign/Reindex are queued jobs now (#14) - ImportCommand.ExecuteAsync
+/// returns as soon as the job is enqueued, not once it has run. Tests that need the import to have
+/// actually landed poll the real IJobQueue the view model was built with until its job reaches a
+/// terminal state, the same way MainWindowViewModelTests already polls for its own async fan-out.
 /// </summary>
 public class LibraryViewModelTests : IDisposable
 {
@@ -28,7 +35,7 @@ public class LibraryViewModelTests : IDisposable
         public Task<string?> PickClipExportPathAsync(string suggestedFileName) => Task.FromResult<string?>(null);
     }
 
-    private async Task<LibraryViewModel?> TrySetUpAsync(params IReadOnlyList<string> pickedFilePaths)
+    private async Task<(LibraryViewModel ViewModel, IJobQueue JobQueue)?> TrySetUpAsync(params IReadOnlyList<string> pickedFilePaths)
     {
         var locator = new EspeakToolLocator();
         var status = await locator.LocateAsync();
@@ -50,10 +57,24 @@ public class LibraryViewModelTests : IDisposable
         var phonemizer = new EspeakPhonemizer(locator);
         var ingestion = new MediaIngestionService(await dbContextFactory.CreateDbContextAsync(), TranscriptParserFactory.CreateDefault(), phonemizer, new UnusedTranscriptionProvider(), new MediaMetadataProbe(new FFprobeToolLocator()));
         var libraryService = new LibraryService(dbContextFactory);
+        var jobQueue = new JobQueueService();
 
-        return new LibraryViewModel(
+        var viewModel = new LibraryViewModel(
             libraryService, ingestion, new StubFilePickerService(pickedFilePaths), new InMemorySettingsStore(),
-            new Infrastructure.Search.PhoneNGramIndexService(dbContextFactory));
+            new Infrastructure.Search.PhoneNGramIndexService(dbContextFactory), jobQueue);
+
+        return (viewModel, jobQueue);
+    }
+
+    /// <summary>Waits for every job the queue currently knows about to reach a terminal state.</summary>
+    private static async Task WaitForJobsToFinishAsync(IJobQueue jobQueue, int timeoutMs = 5000)
+    {
+        var elapsed = 0;
+        while (jobQueue.Jobs.Any(j => j.State is JobState.Queued or JobState.Running) && elapsed < timeoutMs)
+        {
+            await Task.Delay(10);
+            elapsed += 10;
+        }
     }
 
     [Fact]
@@ -67,13 +88,15 @@ public class LibraryViewModelTests : IDisposable
 
             """);
 
-        var viewModel = await TrySetUpAsync(srtPath);
-        if (viewModel is null)
+        var setup = await TrySetUpAsync(srtPath);
+        if (setup is null)
         {
             return;
         }
 
+        var (viewModel, jobQueue) = setup.Value;
         await viewModel.ImportCommand.ExecuteAsync(null);
+        await WaitForJobsToFinishAsync(jobQueue);
 
         var item = Assert.Single(viewModel.Items);
         Assert.Equal("clip.srt", item.Title);
@@ -98,13 +121,15 @@ public class LibraryViewModelTests : IDisposable
         var mediaPath = Path.Combine(_tempDir, "clip.mp4");
         await File.WriteAllTextAsync(mediaPath, "not a real video, just needs to exist");
 
-        var viewModel = await TrySetUpAsync(srtPath, mediaPath);
-        if (viewModel is null)
+        var setup = await TrySetUpAsync(srtPath, mediaPath);
+        if (setup is null)
         {
             return;
         }
 
+        var (viewModel, jobQueue) = setup.Value;
         await viewModel.ImportCommand.ExecuteAsync(null);
+        await WaitForJobsToFinishAsync(jobQueue);
 
         var item = Assert.Single(viewModel.Items);
         Assert.Equal("🎬 playable", item.PlayableMediaDisplay);
@@ -116,21 +141,25 @@ public class LibraryViewModelTests : IDisposable
         // Milestone 3: a bare media file is a valid selection now - it should reach
         // ITranscriptionProvider rather than being rejected by file-selection validation.
         // TrySetUpAsync wires UnusedTranscriptionProvider, which throws a distinctive message,
-        // so seeing that message (not a "select a transcript" validation error) proves the
-        // classification logic let it through.
+        // so seeing that message on the failed job (not a "select a transcript" validation error)
+        // proves the classification logic let it through.
         var mediaPath = Path.Combine(_tempDir, "clip.mp4");
         await File.WriteAllTextAsync(mediaPath, "not a real video");
 
-        var viewModel = await TrySetUpAsync(mediaPath);
-        if (viewModel is null)
+        var setup = await TrySetUpAsync(mediaPath);
+        if (setup is null)
         {
             return;
         }
 
+        var (viewModel, jobQueue) = setup.Value;
         await viewModel.ImportCommand.ExecuteAsync(null);
+        await WaitForJobsToFinishAsync(jobQueue);
 
         Assert.Empty(viewModel.Items);
-        Assert.Contains("should not need transcription", viewModel.StatusMessage);
+        var job = Assert.Single(jobQueue.Jobs);
+        Assert.Equal(JobState.Failed, job.State);
+        Assert.Contains("should not need transcription", job.Error);
     }
 
     [Fact]
@@ -141,31 +170,36 @@ public class LibraryViewModelTests : IDisposable
         await File.WriteAllTextAsync(mediaPathA, "not a real video");
         await File.WriteAllTextAsync(mediaPathB, "not a real video");
 
-        var viewModel = await TrySetUpAsync(mediaPathA, mediaPathB);
-        if (viewModel is null)
+        var setup = await TrySetUpAsync(mediaPathA, mediaPathB);
+        if (setup is null)
         {
             return;
         }
 
+        var (viewModel, jobQueue) = setup.Value;
+
+        // Classification runs synchronously before anything is queued, so this is still reported
+        // directly on the view model rather than as a job.
         await viewModel.ImportCommand.ExecuteAsync(null);
 
         Assert.Empty(viewModel.Items);
+        Assert.Empty(jobQueue.Jobs);
         Assert.Contains("Select only one audio/video file", viewModel.StatusMessage);
     }
 
     [Fact]
     public async Task LoadAsync_WithNoImportedMedia_ReportsEmptyLibrary()
     {
-        var viewModel = await TrySetUpAsync();
-        if (viewModel is null)
+        var setup = await TrySetUpAsync();
+        if (setup is null)
         {
             return;
         }
 
-        await viewModel.LoadAsync();
+        await setup.Value.ViewModel.LoadAsync();
 
-        Assert.Empty(viewModel.Items);
-        Assert.Equal("No media imported yet.", viewModel.StatusMessage);
+        Assert.Empty(setup.Value.ViewModel.Items);
+        Assert.Equal("No media imported yet.", setup.Value.ViewModel.StatusMessage);
     }
 
     [Fact]
@@ -179,13 +213,15 @@ public class LibraryViewModelTests : IDisposable
 
             """);
 
-        var viewModel = await TrySetUpAsync(srtPath);
-        if (viewModel is null)
+        var setup = await TrySetUpAsync(srtPath);
+        if (setup is null)
         {
             return;
         }
 
+        var (viewModel, jobQueue) = setup.Value;
         await viewModel.ImportCommand.ExecuteAsync(null);
+        await WaitForJobsToFinishAsync(jobQueue);
         var item = Assert.Single(viewModel.Items);
 
         await viewModel.RemoveFromLibraryCommand.ExecuteAsync(item);
@@ -205,13 +241,15 @@ public class LibraryViewModelTests : IDisposable
 
             """);
 
-        var viewModel = await TrySetUpAsync(srtPath);
-        if (viewModel is null)
+        var setup = await TrySetUpAsync(srtPath);
+        if (setup is null)
         {
             return;
         }
 
+        var (viewModel, jobQueue) = setup.Value;
         await viewModel.ImportCommand.ExecuteAsync(null);
+        await WaitForJobsToFinishAsync(jobQueue);
         var item = Assert.Single(viewModel.Items);
 
         // First click arms the confirmation - nothing should be deleted yet.
@@ -237,13 +275,15 @@ public class LibraryViewModelTests : IDisposable
 
             """);
 
-        var viewModel = await TrySetUpAsync(srtPath);
-        if (viewModel is null)
+        var setup = await TrySetUpAsync(srtPath);
+        if (setup is null)
         {
             return;
         }
 
+        var (viewModel, jobQueue) = setup.Value;
         await viewModel.ImportCommand.ExecuteAsync(null);
+        await WaitForJobsToFinishAsync(jobQueue);
         var item = Assert.Single(viewModel.Items);
 
         await viewModel.DeleteSourceFileCommand.ExecuteAsync(item);
@@ -255,58 +295,40 @@ public class LibraryViewModelTests : IDisposable
     }
 
     /// <summary>
-    /// A failed import must be visually distinguishable from routine status. Before this, both
-    /// were the same thin grey line, so an accurate and actionable failure read as nothing having
-    /// happened - which is exactly how a model-not-installed realignment failure was missed.
+    /// Milestone 14: a failed import's error now lives on its Job (surfaced in the Jobs panel)
+    /// rather than LibraryViewModel.StatusMessage - the whole point of the queue replacing the
+    /// single status line is that a later job's status can't overwrite an earlier one's failure.
     /// </summary>
     [Fact]
-    public async Task ImportAsync_MarksAFailureAsAnError()
+    public async Task ImportAsync_AFailedJob_RecordsAReadableError()
     {
-        var viewModel = await TrySetUpAsync("/does/not/exist.srt");
-        if (viewModel is null)
+        var setup = await TrySetUpAsync("/does/not/exist.srt");
+        if (setup is null)
         {
             return;
         }
 
+        var (viewModel, jobQueue) = setup.Value;
         await viewModel.ImportCommand.ExecuteAsync(null);
+        await WaitForJobsToFinishAsync(jobQueue);
 
-        Assert.True(viewModel.IsStatusError);
-        Assert.NotEqual("", viewModel.StatusMessage);
+        var job = Assert.Single(jobQueue.Jobs);
+        Assert.Equal(JobState.Failed, job.State);
+        Assert.False(string.IsNullOrEmpty(job.Error));
     }
 
     [Fact]
     public async Task LoadAsync_LeavesRoutineStatusUnmarked()
     {
-        var viewModel = await TrySetUpAsync();
-        if (viewModel is null)
+        var setup = await TrySetUpAsync();
+        if (setup is null)
         {
             return;
         }
 
-        await viewModel.LoadAsync();
+        await setup.Value.ViewModel.LoadAsync();
 
-        Assert.False(viewModel.IsStatusError);
-    }
-
-    /// <summary>
-    /// A success after a failure must not inherit the failure's styling - a stale red block is
-    /// worse than no signal at all.
-    /// </summary>
-    [Fact]
-    public async Task AStatusMessageAfterAnErrorClearsTheErrorFlag()
-    {
-        var viewModel = await TrySetUpAsync("/does/not/exist.srt");
-        if (viewModel is null)
-        {
-            return;
-        }
-
-        await viewModel.ImportCommand.ExecuteAsync(null);
-        Assert.True(viewModel.IsStatusError);
-
-        await viewModel.LoadAsync();
-
-        Assert.False(viewModel.IsStatusError);
+        Assert.False(setup.Value.ViewModel.IsStatusError);
     }
 
     public void Dispose()

@@ -21,23 +21,27 @@ public partial class MainWindowViewModel : ViewModelBase
 
     public SettingsViewModel Settings { get; }
 
+    public JobsPanelViewModel Jobs { get; }
+
     public ObservableCollection<SearchViewModel> SearchTabs { get; } = [];
 
     [ObservableProperty]
     private SearchViewModel? _activeSearchTab;
 
     /// <summary>
-    /// Milestone 14 fills this panel's content; for now it is a shell that can be shown or hidden
-    /// so the layout doesn't waste vertical space on an empty panel by default.
+    /// Whether the bottom Jobs/Errors panel (Milestone 14) is shown - collapsible so the layout
+    /// doesn't waste vertical space on it when there's nothing to show.
     /// </summary>
     [ObservableProperty]
     private bool _isBottomPanelVisible;
 
-    public MainWindowViewModel(Func<SearchViewModel> searchViewModelFactory, LibraryViewModel library, SettingsViewModel settings)
+    public MainWindowViewModel(
+        Func<SearchViewModel> searchViewModelFactory, LibraryViewModel library, SettingsViewModel settings, JobsPanelViewModel jobs)
     {
         _searchViewModelFactory = searchViewModelFactory;
         Library = library;
         Settings = settings;
+        Jobs = jobs;
 
         // Milestone 13: an open search tab's scope indicator must reflect a checkbox toggled in
         // the (always-visible) library panel *before* the next search runs, not only after -

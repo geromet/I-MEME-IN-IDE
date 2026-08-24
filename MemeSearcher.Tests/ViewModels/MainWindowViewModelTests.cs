@@ -1,5 +1,6 @@
 using MemeSearcher.Infrastructure.Database;
 using MemeSearcher.Infrastructure.Ffmpeg;
+using MemeSearcher.Infrastructure.Jobs;
 using MemeSearcher.Infrastructure.Library;
 using MemeSearcher.Infrastructure.Phonetics;
 using MemeSearcher.Infrastructure.Processes;
@@ -57,12 +58,14 @@ public class MainWindowViewModelTests : IDisposable
             new FakeMediaPlayerLauncher(), new FakeClipboardService(),
             new FFmpegClipExtractor(new FFmpegToolLocator()), new FakeFilePickerService(), settingsStore);
 
+        var jobQueue = new JobQueueService();
         var libraryViewModel = new LibraryViewModel(
             libraryService, new MediaIngestionService(await dbContextFactory.CreateDbContextAsync(), TranscriptParserFactory.CreateDefault(), phonemizer, new UnusedTranscriptionProvider(), new MediaMetadataProbe(new FFprobeToolLocator())),
-            new FakeFilePickerService(), settingsStore, new PhoneNGramIndexService(dbContextFactory));
+            new FakeFilePickerService(), settingsStore, new PhoneNGramIndexService(dbContextFactory), jobQueue);
         var settingsViewModel = new SettingsViewModel(new SettingsRegistry([]), settingsStore);
+        var jobsPanelViewModel = new JobsPanelViewModel(jobQueue);
 
-        var viewModel = new MainWindowViewModel(SearchViewModelFactory, libraryViewModel, settingsViewModel);
+        var viewModel = new MainWindowViewModel(SearchViewModelFactory, libraryViewModel, settingsViewModel, jobsPanelViewModel);
 
         return (viewModel, dbContextFactory, phonemizer);
     }

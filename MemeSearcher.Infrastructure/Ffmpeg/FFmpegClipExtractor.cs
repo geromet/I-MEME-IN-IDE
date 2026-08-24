@@ -136,7 +136,7 @@ public class FFmpegClipExtractor(FFmpegToolLocator toolLocator)
             ?? throw new InvalidOperationException($"Failed to start '{status.ExecutablePath}'.");
 
         var stderrTask = process.StandardError.ReadToEndAsync(cancellationToken);
-        await process.WaitForExitAsync(cancellationToken);
+        await ProcessRunner.WaitForExitAndKillOnCancelAsync(process, cancellationToken);
 
         if (process.ExitCode != 0 || !File.Exists(outputPath))
         {

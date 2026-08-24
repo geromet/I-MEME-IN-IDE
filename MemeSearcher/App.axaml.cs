@@ -3,10 +3,12 @@ using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using MemeSearcher.Core.Interfaces;
+using MemeSearcher.Core.Jobs;
 using MemeSearcher.Core.Settings;
 using MemeSearcher.Infrastructure.Alignment;
 using MemeSearcher.Infrastructure.Database;
 using MemeSearcher.Infrastructure.Ffmpeg;
+using MemeSearcher.Infrastructure.Jobs;
 using MemeSearcher.Infrastructure.Library;
 using MemeSearcher.Infrastructure.Phonetics;
 using MemeSearcher.Infrastructure.Processes;
@@ -79,6 +81,11 @@ public partial class App : Application
         services.AddScoped<IPhoneNGramIndexService, PhoneNGramIndexService>();
         services.AddScoped<MediaIngestionService>();
 
+        // Milestone 14: import/realign/reindex become queued jobs rather than direct awaits, so
+        // the concurrency limit here is what stops queuing ten whisperx runs from launching ten
+        // at once (#14). One shared instance for the app's lifetime - it *is* the queue.
+        services.AddSingleton<IJobQueue>(_ => new JobQueueService(maxConcurrency: 1));
+
         // Every locator gets the settings store and the tool category: without them a locator
         // silently ignores its configured path and keeps reporting "not found on PATH".
         services.AddSingleton<IExternalToolLocator>(sp => new EspeakToolLocator(
@@ -127,6 +134,7 @@ public partial class App : Application
         services.AddSingleton<Func<SearchViewModel>>(sp => sp.GetRequiredService<SearchViewModel>);
         services.AddTransient<LibraryViewModel>();
         services.AddTransient<SettingsViewModel>();
+        services.AddTransient<JobsPanelViewModel>();
         services.AddTransient<MainWindowViewModel>();
         services.AddTransient<MainWindow>();
 

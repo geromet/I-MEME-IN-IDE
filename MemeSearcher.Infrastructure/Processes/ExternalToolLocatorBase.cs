@@ -102,7 +102,7 @@ public abstract class ExternalToolLocatorBase(
 
         var output = await process.StandardOutput.ReadToEndAsync(cancellationToken);
         var error = await process.StandardError.ReadToEndAsync(cancellationToken);
-        await process.WaitForExitAsync(cancellationToken);
+        await ProcessRunner.WaitForExitAndKillOnCancelAsync(process, cancellationToken);
 
         // A tool that is present but cannot import its own dependencies exits non-zero and says why
         // on stderr. Surfacing that is the difference between "MFA is broken somehow" and a message
