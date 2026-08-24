@@ -14,6 +14,8 @@ public class MemeSearcherDbContext(DbContextOptions<MemeSearcherDbContext> optio
     public DbSet<PhoneNGramPosting> PhoneNGramPostings => Set<PhoneNGramPosting>();
     public DbSet<Catalog> Catalogs => Set<Catalog>();
     public DbSet<CatalogMedia> CatalogMedia => Set<CatalogMedia>();
+    public DbSet<Template> Templates => Set<Template>();
+    public DbSet<TemplateVariant> TemplateVariants => Set<TemplateVariant>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -141,6 +143,36 @@ public class MemeSearcherDbContext(DbContextOptions<MemeSearcherDbContext> optio
             entity.HasOne<Media>()
                 .WithMany()
                 .HasForeignKey(cm => cm.MediaId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<Template>(entity =>
+        {
+            entity.HasKey(t => t.Id);
+            entity.Property(t => t.Name).IsRequired();
+            entity.Property(t => t.Mode).HasConversion<string>().IsRequired();
+
+            // A template must survive its target catalog being deleted (#20/#21: a catalog
+            // deletion never cascades into anything that merely references it) - it just falls
+            // back to searching all indexed media.
+            entity.HasOne<Catalog>()
+                .WithMany()
+                .HasForeignKey(t => t.TargetCatalogId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<TemplateVariant>(entity =>
+        {
+            entity.HasKey(v => v.Id);
+            entity.Property(v => v.Label).IsRequired();
+            entity.Property(v => v.PhonesRaw).IsRequired();
+            entity.Property(v => v.Alphabet).HasConversion<string>().IsRequired();
+
+            entity.HasIndex(v => v.TemplateId);
+
+            entity.HasOne<Template>()
+                .WithMany()
+                .HasForeignKey(v => v.TemplateId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
     }

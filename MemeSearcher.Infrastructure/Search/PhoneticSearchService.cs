@@ -36,11 +36,21 @@ public class PhoneticSearchService(
         PhoneticSearchOptions? options = null,
         CancellationToken cancellationToken = default)
     {
-        options ??= PhoneticSearchOptions.ForMode(mode);
-
         var phonemizedQuery = await queryCache.GetOrAddAsync(
             queryText, language, ct => phonemizer.PhonemizeAsync(queryText, language, ct), cancellationToken);
-        var queryTokens = PhoneStreamBuilder.BuildQueryTokens(phonemizedQuery);
+
+        return await SearchAsync(PhoneStreamBuilder.BuildQueryTokens(phonemizedQuery), scope, mode, options, cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<SearchResult>> SearchAsync(
+        IReadOnlyList<PhoneToken> queryTokens,
+        SearchScope scope,
+        SearchMode mode = SearchMode.SimilarPhonetic,
+        PhoneticSearchOptions? options = null,
+        CancellationToken cancellationToken = default)
+    {
+        options ??= PhoneticSearchOptions.ForMode(mode);
+
         var queryPhonemeCount = queryTokens.Count(t => !t.IsBoundary);
 
         if (queryTokens.Count == 0 || queryPhonemeCount == 0)
