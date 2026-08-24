@@ -7,11 +7,13 @@ using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using MemeSearcher.Core.Interfaces;
+using MemeSearcher.Core.Models;
 using MemeSearcher.Core.Phonetics;
 using MemeSearcher.Core.Search;
 using MemeSearcher.Infrastructure.Catalogs;
 using MemeSearcher.Infrastructure.Ffmpeg;
 using MemeSearcher.Infrastructure.Library;
+using MemeSearcher.Infrastructure.Search;
 using MemeSearcher.Infrastructure.Templates;
 using MemeSearcher.Services;
 
@@ -34,6 +36,7 @@ public partial class TemplatesViewModel(
     TemplateImportExportService templateImportExportService,
     CatalogService catalogService,
     LibraryService libraryService,
+    SearchHistoryService searchHistoryService,
     IMediaPlayerLauncher playerLauncher,
     IClipboardService clipboard,
     FFmpegClipExtractor clipExtractor,
@@ -180,6 +183,8 @@ public partial class TemplatesViewModel(
 
             SelectedTemplate = Templates.FirstOrDefault(t => t.Id == previouslySelectedId);
             StatusMessage = Templates.Count > 0 ? $"{Templates.Count} template(s)." : "No templates yet.";
+
+            await LoadRecentRunsAsync();
         }
         catch (Exception ex)
         {
@@ -361,10 +366,15 @@ public partial class TemplatesViewModel(
 
         try
         {
-            var results = await templateSearchService.SearchAsync(template.Id);
-            var mediaPaths = await libraryService.GetPathsAsync(results.Select(r => r.MediaId));
+            // TemplateSearchService resolves the scope once and hands the description back
+            // alongside the results, rather than this method re-deriving it from
+            // template.TargetCatalogId a second time - two independent lookups of the same
+            // catalog's membership could disagree if the catalog changed in between; one shared
+            // resolution cannot.
+            var outcome = await templateSearchService.SearchAsync(template.Id);
+            var mediaPaths = await libraryService.GetPathsAsync(outcome.Results.Select(r => r.MediaId));
 
-            foreach (var result in results)
+            foreach (var result in outcome.Results)
             {
                 Results.Add(new SearchResultRowViewModel(result, playerLauncher, clipboard, clipExtractor, filePicker)
                 {
@@ -373,11 +383,56 @@ public partial class TemplatesViewModel(
             }
 
             StatusMessage = Results.Count > 0 ? $"{Results.Count} result(s)." : "No matches found.";
+
+            await searchHistoryService.RecordTemplateRunAsync(
+                template.Id, template.Name, outcome.ScopeDescription, Results.Count, outcome.SelectedMediaIds);
+            await LoadRecentRunsAsync();
         }
         catch (Exception ex)
         {
             SetError($"Search failed: {ex.Message}");
         }
+    }
+
+    public ObservableCollection<SearchHistoryEntry> RecentRuns { get; } = [];
+
+    [RelayCommand]
+    public async Task LoadRecentRunsAsync()
+    {
+        var recent = await searchHistoryService.GetRecentTemplateRunsAsync();
+
+        RecentRuns.Clear();
+        foreach (var entry in recent)
+        {
+            RecentRuns.Add(entry);
+        }
+    }
+
+    /// <summary>
+    /// Re-running a template history entry re-runs the template *by reference* (looked up fresh by
+    /// TemplateId), not a reconstructed query - if the template's phones or variants changed since
+    /// this entry was recorded, the rerun reflects that, matching #21's own instruction not to let
+    /// a template run silently diverge from what re-running it produces. If the template has since
+    /// been deleted, TemplateId is null (SetNull on delete) and there is nothing to re-run.
+    /// </summary>
+    [RelayCommand]
+    private async Task RerunAsync(SearchHistoryEntry entry)
+    {
+        if (entry.TemplateId is not { } templateId)
+        {
+            SetError($"\"{entry.TemplateName}\" no longer exists - it can't be re-run.");
+            return;
+        }
+
+        var template = Templates.FirstOrDefault(t => t.Id == templateId);
+        if (template is null)
+        {
+            SetError($"\"{entry.TemplateName}\" no longer exists - it can't be re-run.");
+            return;
+        }
+
+        SelectedTemplate = template;
+        await RunAsync(template);
     }
 
     /// <summary>Export as a plain JSON file (#21) - a target catalog is deliberately left out of the file (TemplateExportFile's own doc comment explains why), so nothing here needs to ask about that.</summary>

@@ -2,6 +2,7 @@ using MemeSearcher.Core.Phonetics;
 using MemeSearcher.Core.Search;
 using MemeSearcher.Infrastructure.Catalogs;
 using MemeSearcher.Infrastructure.Database;
+using MemeSearcher.Infrastructure.Search;
 using MemeSearcher.Infrastructure.Templates;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -106,6 +107,31 @@ public class TemplateServiceTests : IDisposable
         var afterDelete = Assert.Single(await templates.GetAllAsync());
         Assert.Equal(templateId, afterDelete.Id);
         Assert.Null(afterDelete.TargetCatalogId);
+    }
+
+    [Fact]
+    public async Task DeletingATemplate_ClearsTemplateIdOnItsHistoryEntries_WithoutDeletingThem()
+    {
+        var (templates, _) = await SetUpAsync();
+        var templateId = await templates.CreateAsync("Growl", null);
+
+        var dbContextFactory = new ServiceCollection()
+            .AddDbContextFactory<MemeSearcherDbContext>(o => o.UseSqlite($"Data Source={_dbPath}"))
+            .BuildServiceProvider()
+            .GetRequiredService<IDbContextFactory<MemeSearcherDbContext>>();
+        var historyService = new SearchHistoryService(dbContextFactory);
+        await historyService.RecordTemplateRunAsync(templateId, "Growl", "All indexed media", resultCount: 1);
+
+        await templates.DeleteAsync(templateId);
+
+        // Not GetRecentTemplateRunsAsync - that filters on TemplateId != null, which this row no
+        // longer satisfies after SetNull. Reading the table directly is the only way to see the
+        // "cleared but not deleted" row this test exists to prove.
+        await using var context = await dbContextFactory.CreateDbContextAsync();
+        var entry = Assert.Single(await context.SearchHistory.ToListAsync());
+        Assert.Null(entry.TemplateId);
+        Assert.Equal("Growl", entry.TemplateName);
+        Assert.Equal(1, entry.ResultCount);
     }
 
     public void Dispose()

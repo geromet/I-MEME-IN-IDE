@@ -98,11 +98,16 @@ public class MemeSearcherDbContext(DbContextOptions<MemeSearcherDbContext> optio
         modelBuilder.Entity<SearchHistoryEntry>(entity =>
         {
             entity.HasKey(h => h.Id);
-            entity.Property(h => h.QueryText).IsRequired();
-            entity.Property(h => h.Language).IsRequired();
             entity.Property(h => h.ScopeDescription).IsRequired();
 
             entity.HasIndex(h => h.SearchedAt);
+
+            // A deleted template's past runs are still a real fact about what was searched - the
+            // history row survives with TemplateId cleared, not cascade-deleted (#21).
+            entity.HasOne<Template>()
+                .WithMany()
+                .HasForeignKey(h => h.TemplateId)
+                .OnDelete(DeleteBehavior.SetNull);
         });
 
         modelBuilder.Entity<PhoneNGramPosting>(entity =>

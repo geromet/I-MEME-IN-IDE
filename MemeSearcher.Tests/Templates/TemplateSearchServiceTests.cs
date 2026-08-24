@@ -139,10 +139,10 @@ public class TemplateSearchServiceTests : IDisposable
         await templateService.AddVariantAsync(templateId, "Exact", string.Join(' ', actualPhones), PhoneAlphabet.Ipa);
 
         var templateSearchService = new TemplateSearchService(dbFactory, searchService, catalogService);
-        var templateResults = await templateSearchService.SearchAsync(templateId);
+        var outcome = await templateSearchService.SearchAsync(templateId);
 
-        Assert.NotEmpty(templateResults);
-        Assert.Contains("ʁ", Assert.Single(templateResults).MatchPhonemes);
+        Assert.NotEmpty(outcome.Results);
+        Assert.Contains("ʁ", Assert.Single(outcome.Results).MatchPhonemes);
     }
 
     [Fact]
@@ -172,9 +172,9 @@ public class TemplateSearchServiceTests : IDisposable
         await templateService.AddVariantAsync(templateId, "UK", string.Join(' ', ukPhones), PhoneAlphabet.Ipa);
 
         var templateSearchService = new TemplateSearchService(dbFactory, searchService, catalogService);
-        var results = await templateSearchService.SearchAsync(templateId);
+        var outcome = await templateSearchService.SearchAsync(templateId);
 
-        var matchedMediaIds = results.Select(r => r.MediaId).ToHashSet();
+        var matchedMediaIds = outcome.Results.Select(r => r.MediaId).ToHashSet();
         Assert.Contains(usMediaId, matchedMediaIds);
         Assert.Contains(ukMediaId, matchedMediaIds);
     }
@@ -210,11 +210,16 @@ public class TemplateSearchServiceTests : IDisposable
         await templateService.SetTargetCatalogAsync(templateId, catalogId);
 
         var templateSearchService = new TemplateSearchService(dbFactory, searchService, catalogService);
-        var results = await templateSearchService.SearchAsync(templateId);
+        var outcome = await templateSearchService.SearchAsync(templateId);
 
-        var matchedMediaIds = results.Select(r => r.MediaId).ToHashSet();
+        var matchedMediaIds = outcome.Results.Select(r => r.MediaId).ToHashSet();
         Assert.Contains(inCatalogId, matchedMediaIds);
         Assert.DoesNotContain(outOfCatalogId, matchedMediaIds);
+
+        // The description is provably the scope the search actually used, not a separately
+        // re-derived one - see TemplateSearchOutcome's own doc comment for why that matters.
+        Assert.Equal("Catalog: Growls only (1 source(s))", outcome.ScopeDescription);
+        Assert.Equal([inCatalogId], outcome.SelectedMediaIds);
     }
 
     public void Dispose()

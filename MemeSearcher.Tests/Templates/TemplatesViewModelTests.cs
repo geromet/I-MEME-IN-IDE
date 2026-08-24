@@ -50,6 +50,7 @@ public class TemplatesViewModelTests : IDisposable
             new TemplateImportExportService(dbContextFactory),
             catalogService,
             libraryService,
+            new SearchHistoryService(dbContextFactory),
             new FakeMediaPlayerLauncher(),
             new FakeClipboardService(),
             new FFmpegClipExtractor(new FFmpegToolLocator()),
@@ -96,6 +97,67 @@ public class TemplatesViewModelTests : IDisposable
 
         var importedVariant = Assert.Single(await templateService.GetAllAsync(), t => t.Id == importedTemplate.Id);
         Assert.Equal("ʁ ɣ ʁ", Assert.Single(importedVariant.Variants).PhonesRaw);
+    }
+
+    [Fact]
+    public async Task RunningATemplate_RecordsItInRecentRuns_AndRerunCommandRunsItAgain()
+    {
+        var setup = await TrySetUpAsync();
+        if (setup is null)
+        {
+            return;
+        }
+
+        var (viewModel, _, _) = setup.Value;
+
+        viewModel.NewTemplateName = "Growl";
+        await viewModel.CreateCommand.ExecuteAsync(null);
+        var template = Assert.Single(viewModel.Templates);
+        viewModel.SelectedTemplate = template;
+
+        viewModel.NewVariantPhonesRaw = "ʁ ɣ ʁ";
+        await viewModel.AddVariantCommand.ExecuteAsync(null);
+
+        await viewModel.RunCommand.ExecuteAsync(template);
+
+        var run = Assert.Single(viewModel.RecentRuns);
+        Assert.Equal(template.Id, run.TemplateId);
+        Assert.Equal("Growl", run.TemplateName);
+        Assert.Equal("All indexed media", run.ScopeDescription);
+        Assert.Null(run.QueryText);
+
+        // Re-running looks the template up by TemplateId, not by any reconstructed data on the
+        // history entry, and records a second run.
+        await viewModel.RerunCommand.ExecuteAsync(run);
+
+        Assert.Equal(2, viewModel.RecentRuns.Count);
+        Assert.All(viewModel.RecentRuns, r => Assert.Equal(template.Id, r.TemplateId));
+    }
+
+    [Fact]
+    public async Task RerunCommand_WhenTheTemplateNoLongerExists_ReportsAnErrorInsteadOfThrowing()
+    {
+        var setup = await TrySetUpAsync();
+        if (setup is null)
+        {
+            return;
+        }
+
+        var (viewModel, _, _) = setup.Value;
+        var staleEntry = new MemeSearcher.Core.Models.SearchHistoryEntry
+        {
+            Id = Guid.NewGuid(),
+            TemplateId = null, // as it would be after the template's own deletion (SetNull)
+            TemplateName = "Deleted Template",
+            ScopeDescription = "All indexed media",
+            ResultCount = 0,
+            SearchedAt = DateTimeOffset.UtcNow,
+        };
+
+        await viewModel.RerunCommand.ExecuteAsync(staleEntry);
+
+        Assert.True(viewModel.IsStatusError);
+        Assert.Contains("Deleted Template", viewModel.StatusMessage);
     }
 
     public void Dispose()

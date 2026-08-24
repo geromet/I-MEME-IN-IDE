@@ -69,6 +69,48 @@ public class SearchHistoryServiceTests : IDisposable
         Assert.Empty(recent);
     }
 
+    /// <summary>Milestone 18 (#21): a template run has no text/language to show, and SearchViewModel's rerun path assumes both are present - the two kinds of entry must never mix in the same list.</summary>
+    [Fact]
+    public async Task RecordTemplateRunAsync_DoesNotAppearInGetRecentAsync_OnlyInItsOwnList()
+    {
+        var factory = await CreateFactoryAsync();
+        var service = new SearchHistoryService(factory);
+        var templateId = await new MemeSearcher.Infrastructure.Templates.TemplateService(factory).CreateAsync("Growl", null);
+
+        await service.RecordAsync("among us", "en-US", isComposite: false, "All indexed media", resultCount: 3);
+        await service.RecordTemplateRunAsync(templateId, "Growl", "All indexed media", resultCount: 1);
+
+        var textHistory = await service.GetRecentAsync();
+        var templateRuns = await service.GetRecentTemplateRunsAsync();
+
+        var textEntry = Assert.Single(textHistory);
+        Assert.Equal("among us", textEntry.QueryText);
+        Assert.Null(textEntry.TemplateId);
+
+        var templateEntry = Assert.Single(templateRuns);
+        Assert.Equal(templateId, templateEntry.TemplateId);
+        Assert.Equal("Growl", templateEntry.TemplateName);
+        Assert.Null(templateEntry.QueryText);
+        Assert.Null(templateEntry.Language);
+        Assert.Equal(1, templateEntry.ResultCount);
+    }
+
+    [Fact]
+    public async Task RecordTemplateRunAsync_WithSelectedMediaIds_PersistsThemForToSearchScope()
+    {
+        var factory = await CreateFactoryAsync();
+        var service = new SearchHistoryService(factory);
+        var templateId = await new MemeSearcher.Infrastructure.Templates.TemplateService(factory).CreateAsync("Growl", null);
+
+        var mediaId = Guid.NewGuid();
+        await service.RecordTemplateRunAsync(templateId, "Growl", "Catalog: Growls only (1 source(s))", resultCount: 1, [mediaId]);
+
+        var entry = Assert.Single(await service.GetRecentTemplateRunsAsync());
+        var scope = entry.ToSearchScope();
+        var selected = Assert.IsType<MemeSearcher.Core.Search.SearchScope.SelectedMedia>(scope);
+        Assert.Equal([mediaId], selected.MediaIds);
+    }
+
     public void Dispose()
     {
         File.Delete(_dbPath);

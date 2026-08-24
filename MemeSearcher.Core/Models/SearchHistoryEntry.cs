@@ -12,10 +12,34 @@ namespace MemeSearcher.Core.Models;
 public class SearchHistoryEntry
 {
     public Guid Id { get; set; }
-    public required string QueryText { get; set; }
-    public required string Language { get; set; }
+
+    /// <summary>
+    /// Null for a template-driven entry (Milestone 18/#21) - a hand-authored phone sequence has no
+    /// text query to show, and stuffing the template's name in here would be exactly the
+    /// "reconstructed string" #21 warns against: it would read as a query the search actually ran,
+    /// when it didn't. <see cref="TemplateId"/>/<see cref="TemplateName"/> carry that case instead.
+    /// </summary>
+    public string? QueryText { get; set; }
+
+    /// <summary>Null for a template-driven entry - a phone-token search bypasses the phonemizer entirely (#21), so no language ever applied to it.</summary>
+    public string? Language { get; set; }
+
     public bool IsComposite { get; set; }
     public required string ScopeDescription { get; set; }
+
+    /// <summary>
+    /// Which template was run, or null for an ordinary text search. SetNull on the template's own
+    /// deletion (see MemeSearcherDbContext) rather than cascading the history row away - a deleted
+    /// template's past runs are still a real fact about what was searched.
+    /// </summary>
+    public Guid? TemplateId { get; set; }
+
+    /// <summary>
+    /// Denormalized at record time, not looked up live - so a later rename or deletion of the
+    /// template doesn't rewrite what this history entry says it ran. Null exactly when
+    /// <see cref="TemplateId"/> is null.
+    /// </summary>
+    public string? TemplateName { get; set; }
 
     /// <summary>
     /// Milestone 13: the actual scope, not just its display text - required for

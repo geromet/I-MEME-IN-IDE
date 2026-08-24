@@ -98,7 +98,9 @@ public partial class SearchViewModel(
     [RelayCommand]
     private async Task RerunSearchAsync(SearchHistoryEntry entry)
     {
-        QueryText = entry.QueryText;
+        // GetRecentAsync already excludes template-driven entries (#21 - they have no text query
+        // to restore), but defend anyway rather than assign a null into this non-nullable property.
+        QueryText = entry.QueryText ?? "";
         IsCompositeMode = entry.IsComposite;
         await RunSearchAsync(entry.ToSearchScope());
     }
