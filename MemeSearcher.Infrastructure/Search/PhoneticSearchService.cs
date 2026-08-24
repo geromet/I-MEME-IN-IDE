@@ -265,6 +265,12 @@ public class PhoneticSearchService(
                 Correspondences = match.Correspondences
                     .Select(c => (c.QueryIndex, c.CandidateIndex + window.Start))
                     .ToList(),
+                // #15: AlignmentSteps carries its own candidate indices that need the same window
+                // offset as Correspondences above - a step's CandidateIndex is null for a
+                // QueryExtra step, so only offset when it's actually present.
+                AlignmentSteps = match.AlignmentSteps
+                    .Select(s => s with { CandidateIndex = s.CandidateIndex + window.Start })
+                    .ToList(),
             };
         }
     }
@@ -293,11 +299,31 @@ public class PhoneticSearchService(
         var matchPhonemes = phonemeEntries.Select(e => e.Token.Symbol).ToList();
         var queryPhonemes = queryTokens.Where(t => !t.IsBoundary).Select(t => t.Symbol).ToList();
 
+        var matchedPhoneDetails = phonemeEntries
+            .Select(e => new MatchedPhone(e.Token.Symbol, e.StartSeconds, e.EndSeconds, e.IsPhoneLevelAligned))
+            .ToList();
+
+        // Word-boundary tokens align cheaply against each other (SubstitutionCost gives them a
+        // free pass) and show up as spurious Match steps here - filtered out, since they're a
+        // structural device the matcher uses internally, not a phoneme correspondence a user
+        // should see (#15).
+        var alignmentSteps = match.AlignmentSteps
+            .Where(s =>
+                (s.QueryIndex is not int qi || !queryTokens[qi].IsBoundary) &&
+                (s.CandidateIndex is not int ci || !candidateStream[ci].Token.IsBoundary))
+            .Select(s => new QueryAlignmentStep(
+                s.Op,
+                s.QueryIndex is int qi2 ? queryTokens[qi2].Symbol : null,
+                s.CandidateIndex is int ci2 ? candidateStream[ci2].Token.Symbol : null))
+            .ToList();
+
         var score = queryPhonemeCount > 0 && !double.IsPositiveInfinity(options.SubstitutionMaxCost)
             ? Math.Clamp(1 - match.Cost / (queryPhonemeCount * options.SubstitutionMaxCost), 0, 1)
             : match.Cost == 0 ? 1.0 : 0.0;
 
-        return new SearchResult(mediaId, startSeconds, endSeconds, sourceText, ipa, matchPhonemes, queryPhonemes, score);
+        return new SearchResult(
+            mediaId, startSeconds, endSeconds, sourceText, ipa, matchPhonemes, queryPhonemes, score,
+            matchedPhoneDetails, alignmentSteps);
     }
 
     private static IEnumerable<string> DistinctConsecutiveWords(IReadOnlyList<PhoneStreamEntry> phonemeEntries)

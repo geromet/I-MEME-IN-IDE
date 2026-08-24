@@ -23,7 +23,12 @@ public partial class MainWindowViewModel : ViewModelBase
 
     public JobsPanelViewModel Jobs { get; }
 
+    public InspectorViewModel Inspector { get; }
+
     public ObservableCollection<SearchViewModel> SearchTabs { get; } = [];
+
+    /// <summary>The tab Inspector is currently subscribed to, so switching tabs can unsubscribe the old one before subscribing the new one (#15).</summary>
+    private SearchViewModel? _inspectedTab;
 
     [ObservableProperty]
     private SearchViewModel? _activeSearchTab;
@@ -36,12 +41,14 @@ public partial class MainWindowViewModel : ViewModelBase
     private bool _isBottomPanelVisible;
 
     public MainWindowViewModel(
-        Func<SearchViewModel> searchViewModelFactory, LibraryViewModel library, SettingsViewModel settings, JobsPanelViewModel jobs)
+        Func<SearchViewModel> searchViewModelFactory, LibraryViewModel library, SettingsViewModel settings,
+        JobsPanelViewModel jobs, InspectorViewModel inspector)
     {
         _searchViewModelFactory = searchViewModelFactory;
         Library = library;
         Settings = settings;
         Jobs = jobs;
+        Inspector = inspector;
 
         // Milestone 13: an open search tab's scope indicator must reflect a checkbox toggled in
         // the (always-visible) library panel *before* the next search runs, not only after -
@@ -64,6 +71,35 @@ public partial class MainWindowViewModel : ViewModelBase
         foreach (var tab in SearchTabs)
         {
             _ = tab.RefreshScopeSummaryAsync();
+        }
+    }
+
+    /// <summary>
+    /// Milestone 15 (#15): the shared Inspector panel shows whichever result is selected in the
+    /// *active* tab - so it has to re-subscribe every time the active tab changes, not just once.
+    /// </summary>
+    partial void OnActiveSearchTabChanged(SearchViewModel? value)
+    {
+        if (_inspectedTab is not null)
+        {
+            _inspectedTab.PropertyChanged -= OnActiveTabPropertyChanged;
+        }
+
+        _inspectedTab = value;
+
+        if (_inspectedTab is not null)
+        {
+            _inspectedTab.PropertyChanged += OnActiveTabPropertyChanged;
+        }
+
+        Inspector.Show(value?.SelectedResult);
+    }
+
+    private void OnActiveTabPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(SearchViewModel.SelectedResult))
+        {
+            Inspector.Show(_inspectedTab?.SelectedResult);
         }
     }
 

@@ -77,7 +77,8 @@ public static class PhoneStreamBuilder
                         stream.Add(PhoneStreamEntry.Phoneme(
                             phone.Symbol, transcript.MediaId, segment.Id, word.Id, word.Text,
                             phone.StartSeconds ?? word.StartSeconds,
-                            phone.EndSeconds ?? word.EndSeconds));
+                            phone.EndSeconds ?? word.EndSeconds,
+                            phone.IsPhoneLevelAligned));
                     }
 
                     isFirstWord = false;
@@ -113,7 +114,8 @@ public static class PhoneStreamBuilder
                 .Select(p => new WordPhone(
                     PhoneAlphabetConverter.ToCanonical(p.Symbol, p.Alphabet).Symbol,
                     p.StartSeconds,
-                    p.EndSeconds))
+                    p.EndSeconds,
+                    IsPhoneLevelAligned: true))
                 .Where(p => p.Symbol.Length > 0)
                 .ToList();
         }
@@ -127,11 +129,11 @@ public static class PhoneStreamBuilder
         // approximation this builder has always made.
         return PhoneAlphabetConverter
             .ToCanonical(word.PhonemeSequence.Split(' ', StringSplitOptions.RemoveEmptyEntries), word.PhonemeAlphabet)
-            .Select(p => new WordPhone(p.Symbol, null, null))
+            .Select(p => new WordPhone(p.Symbol, null, null, IsPhoneLevelAligned: false))
             .ToList();
     }
 
-    private readonly record struct WordPhone(string Symbol, double? StartSeconds, double? EndSeconds);
+    private readonly record struct WordPhone(string Symbol, double? StartSeconds, double? EndSeconds, bool IsPhoneLevelAligned);
 
     /// <summary>
     /// Same word-boundary-preserving flattening as <see cref="Build"/>, applied to a phonemized

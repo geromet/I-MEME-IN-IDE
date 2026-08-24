@@ -135,6 +135,7 @@ public partial class App : Application
         services.AddTransient<LibraryViewModel>();
         services.AddTransient<SettingsViewModel>();
         services.AddTransient<JobsPanelViewModel>();
+        services.AddTransient<InspectorViewModel>();
         services.AddTransient<MainWindowViewModel>();
         services.AddTransient<MainWindow>();
 

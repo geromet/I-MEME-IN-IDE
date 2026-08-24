@@ -8,7 +8,36 @@ namespace MemeSearcher.Core.Search;
 /// consume only one side. Composite search (Milestone 4) uses this to work out which part of the
 /// query each source file's contribution covers; single-source search ignores it.
 /// </summary>
-public record PhoneticMatchSpan(int Start, int End, double Cost, IReadOnlyList<(int QueryIndex, int CandidateIndex)> Correspondences);
+public record PhoneticMatchSpan(int Start, int End, double Cost, IReadOnlyList<(int QueryIndex, int CandidateIndex)> Correspondences)
+{
+    /// <summary>
+    /// Milestone 15 (#15): the full alignment path behind this match, not just its Substitute
+    /// steps - <see cref="AlignmentStep"/> also records where a query phoneme was consumed with
+    /// nothing in the candidate ("query has more than the match") and where a candidate phoneme
+    /// was consumed with nothing in the query ("candidate has more than the query"), which is what
+    /// "substitution/insertion positions visible against the query" actually requires. Kept as a
+    /// separate field rather than folded into Correspondences, since both existing consumers
+    /// (PhoneticSearchService, CompositeSearchService) depend on that field's Substitute-only shape.
+    /// </summary>
+    public IReadOnlyList<AlignmentStep> AlignmentSteps { get; init; } = [];
+}
+
+/// <summary>
+/// One step of the edit-distance alignment between query and candidate (#15). Indices are 0-based
+/// into the respective token lists; a step consumes only the side(s) its <see cref="AlignmentOp"/>
+/// implies - <see cref="CandidateExtra"/> has no QueryIndex, <see cref="QueryExtra"/> has no
+/// CandidateIndex.
+/// </summary>
+public record AlignmentStep(AlignmentOp Op, int? QueryIndex, int? CandidateIndex);
+
+/// <summary>
+/// Named from the UI's point of view, deliberately not from <c>PhoneticSequenceMatcher.Move</c>'s
+/// DP terminology (Move.Delete/Move.Insert there mean the opposite of what a reader expects from
+/// those words, since they describe editing the *query* into the *candidate*). CandidateExtra: the
+/// candidate has a phoneme the query doesn't. QueryExtra: the query has a phoneme the candidate
+/// doesn't.
+/// </summary>
+public enum AlignmentOp { Match, Substitute, CandidateExtra, QueryExtra }
 
 /// <summary>
 /// Approximate substring matching of a query phoneme sequence against a continuous candidate
@@ -142,10 +171,10 @@ public static class PhoneticSequenceMatcher
             var runEnded = !inRange || j == m;
             if (runEnded && runBestEnd != -1)
             {
-                var (start, correspondences) = Backtrace(move, n, runBestEnd);
+                var (start, correspondences, alignmentSteps) = Backtrace(query, candidate, move, n, runBestEnd);
                 if (start > lastMatchEnd)
                 {
-                    matches.Add(new PhoneticMatchSpan(start, runBestEnd, runBestCost, correspondences));
+                    matches.Add(new PhoneticMatchSpan(start, runBestEnd, runBestCost, correspondences) { AlignmentSteps = alignmentSteps });
                     lastMatchEnd = runBestEnd;
                 }
 
@@ -157,9 +186,11 @@ public static class PhoneticSequenceMatcher
         return matches;
     }
 
-    private static (int Start, IReadOnlyList<(int QueryIndex, int CandidateIndex)> Correspondences) Backtrace(Move[,] move, int i, int j)
+    private static (int Start, IReadOnlyList<(int QueryIndex, int CandidateIndex)> Correspondences, IReadOnlyList<AlignmentStep> AlignmentSteps) Backtrace(
+        IReadOnlyList<PhoneToken> query, IReadOnlyList<PhoneToken> candidate, Move[,] move, int i, int j)
     {
         var correspondences = new List<(int, int)>();
+        var steps = new List<AlignmentStep>();
 
         while (i > 0)
         {
@@ -167,20 +198,31 @@ public static class PhoneticSequenceMatcher
             {
                 case Move.Substitute:
                     correspondences.Add((i - 1, j - 1));
+                    // DP terminology: Move.Substitute covers both "same symbol" (cost 0) and a
+                    // real substitution - distinguished here by symbol equality for the UI, which
+                    // wants to tell an exact match from a substitution apart.
+                    steps.Add(new AlignmentStep(
+                        query[i - 1].Symbol == candidate[j - 1].Symbol ? AlignmentOp.Match : AlignmentOp.Substitute,
+                        i - 1, j - 1));
                     i--;
                     j--;
                     break;
                 case Move.Delete:
+                    // Move.Delete: the candidate has a phoneme the query doesn't.
+                    steps.Add(new AlignmentStep(AlignmentOp.CandidateExtra, null, j - 1));
                     j--;
                     break;
                 case Move.Insert:
+                    // Move.Insert: the query has a phoneme the candidate doesn't.
+                    steps.Add(new AlignmentStep(AlignmentOp.QueryExtra, i - 1, null));
                     i--;
                     break;
             }
         }
 
         correspondences.Reverse();
-        return (j, correspondences);
+        steps.Reverse();
+        return (j, correspondences, steps);
     }
 
     /// <summary>

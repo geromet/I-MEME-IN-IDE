@@ -73,6 +73,10 @@ public partial class SearchViewModel(
 
     public ObservableCollection<CompositeSearchResultRowViewModel> CompositeResults { get; } = [];
 
+    /// <summary>Milestone 15 (#15): the result the shared Inspector panel currently shows, bound to the results ListBox's SelectedItem.</summary>
+    [ObservableProperty]
+    private SearchResultRowViewModel? _selectedResult;
+
     public ObservableCollection<SearchHistoryEntry> RecentSearches { get; } = [];
 
     [RelayCommand(CanExecute = nameof(CanSearch))]
@@ -197,6 +201,7 @@ public partial class SearchViewModel(
         var results = await searchService.SearchAsync(QueryText, Language, scope);
         var mediaPaths = await libraryService.GetPathsAsync(results.Select(r => r.MediaId));
 
+        SelectedResult = null;
         Results.Clear();
         foreach (var result in results)
         {
@@ -216,6 +221,7 @@ public partial class SearchViewModel(
 
     private async Task<int> SearchCompositeAsync(SearchScope scope)
     {
+        SelectedResult = null;
         Results.Clear();
 
         var results = await compositeSearchService.SearchAsync(QueryText, Language, scope);

@@ -178,6 +178,76 @@ public class AlignedPhoneSearchTests : IDisposable
         Assert.DoesNotContain("ə", match.MatchPhonemes);
     }
 
+    /// <summary>
+    /// #15: the inspector needs to tell a precisely-aligned phone from an estimated one apart.
+    /// After realignment every matched phone should carry real per-phone timing from the Phone
+    /// table and be flagged IsPhoneLevelAligned.
+    /// </summary>
+    [Fact]
+    public async Task SearchAsync_AfterRealignment_MatchedPhonesAreFlaggedPhoneLevelAligned()
+    {
+        var setup = await TrySetUpAsync();
+        if (setup is null)
+        {
+            return;
+        }
+
+        var (phonemizer, services) = setup.Value;
+        await ImportAndRealignAsync(services, phonemizer, new FakeAlignmentProvider(HelloWorldArpabet));
+
+        var searchService = new Infrastructure.Search.PhoneticSearchService(
+            Factory(services), phonemizer, new Infrastructure.Search.InMemoryQueryPhonemizationCache());
+
+        var results = await searchService.SearchAsync("hello", "en-US", new SearchScope.AllIndexedMedia());
+        var match = Assert.Single(results);
+
+        Assert.NotEmpty(match.MatchedPhoneDetails);
+        Assert.All(match.MatchedPhoneDetails, p =>
+        {
+            Assert.True(p.IsPhoneLevelAligned);
+            Assert.NotNull(p.StartSeconds);
+            Assert.NotNull(p.EndSeconds);
+        });
+    }
+
+    /// <summary>The other side of the same distinction: before any realignment ran, timing is word-level only, so no matched phone should claim phone-level alignment.</summary>
+    [Fact]
+    public async Task SearchAsync_WithoutRealignment_MatchedPhonesAreNotFlaggedPhoneLevelAligned()
+    {
+        var setup = await TrySetUpAsync();
+        if (setup is null)
+        {
+            return;
+        }
+
+        var (phonemizer, services) = setup.Value;
+
+        var mediaPath = Path.Combine(_tempDir, "clip.mp4");
+        await File.WriteAllTextAsync(mediaPath, "placeholder");
+        var srtPath = Path.Combine(_tempDir, "clip.srt");
+        await File.WriteAllTextAsync(srtPath, """
+            1
+            00:00:01,000 --> 00:00:03,000
+            hello world
+
+            """);
+
+        await using (var importContext = await Factory(services).CreateDbContextAsync())
+        {
+            await NewService(importContext, phonemizer)
+                .ImportAsync(new MediaIngestionRequest(mediaPath, srtPath, "en-US"));
+        }
+
+        var searchService = new Infrastructure.Search.PhoneticSearchService(
+            Factory(services), phonemizer, new Infrastructure.Search.InMemoryQueryPhonemizationCache());
+
+        var results = await searchService.SearchAsync("hello", "en-US", new SearchScope.AllIndexedMedia());
+        var match = Assert.Single(results);
+
+        Assert.NotEmpty(match.MatchedPhoneDetails);
+        Assert.All(match.MatchedPhoneDetails, p => Assert.False(p.IsPhoneLevelAligned));
+    }
+
     [Fact]
     public async Task SearchAsync_ResolvesMatchesToTheAlignersTiming()
     {

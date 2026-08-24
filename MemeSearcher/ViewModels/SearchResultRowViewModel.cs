@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -40,6 +41,12 @@ public partial class SearchResultRowViewModel : ObservableObject
     public string Ipa { get; }
     public string PhonemesDisplay { get; }
 
+    /// <summary>Milestone 15 (#15): per-phone timing/provenance for the inspector's phone timeline.</summary>
+    public IReadOnlyList<MatchedPhone> MatchedPhoneDetails { get; }
+
+    /// <summary>Milestone 15 (#15): the query-to-match alignment, for the inspector's correspondence display.</summary>
+    public IReadOnlyList<QueryAlignmentStep> AlignmentSteps { get; }
+
     // Resolved after construction (batched across all results by SearchViewModel), so the
     // Play/Export buttons' enabled state has to react to it arriving.
     [ObservableProperty]
@@ -74,6 +81,8 @@ public partial class SearchResultRowViewModel : ObservableObject
         SourceText = result.SourceText;
         Ipa = result.Ipa;
         PhonemesDisplay = string.Join(' ', result.MatchPhonemes);
+        MatchedPhoneDetails = result.MatchedPhoneDetails;
+        AlignmentSteps = result.AlignmentSteps;
     }
 
     [RelayCommand(CanExecute = nameof(CanPlay))]

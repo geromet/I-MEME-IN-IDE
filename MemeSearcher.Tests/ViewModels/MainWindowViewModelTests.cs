@@ -64,8 +64,9 @@ public class MainWindowViewModelTests : IDisposable
             new FakeFilePickerService(), settingsStore, new PhoneNGramIndexService(dbContextFactory), jobQueue);
         var settingsViewModel = new SettingsViewModel(new SettingsRegistry([]), settingsStore);
         var jobsPanelViewModel = new JobsPanelViewModel(jobQueue);
+        var inspectorViewModel = new InspectorViewModel(new FakeMediaPlayerLauncher());
 
-        var viewModel = new MainWindowViewModel(SearchViewModelFactory, libraryViewModel, settingsViewModel, jobsPanelViewModel);
+        var viewModel = new MainWindowViewModel(SearchViewModelFactory, libraryViewModel, settingsViewModel, jobsPanelViewModel, inspectorViewModel);
 
         return (viewModel, dbContextFactory, phonemizer);
     }

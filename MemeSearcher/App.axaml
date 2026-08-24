@@ -161,6 +161,44 @@
                 <Setter Property="Background" Value="{StaticResource StatusErrorHover}" />
             </Style>
 
+            <!-- Inspector phone timeline (#15): one block per matched phone, colored by whether its
+                 timing came from real per-phone alignment or was estimated from its word's span. -->
+            <Style Selector="Button.PhoneBlock">
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="CornerRadius" Value="3" />
+                <Setter Property="Padding" Value="0" />
+                <Setter Property="MinWidth" Value="0" />
+                <Setter Property="MinHeight" Value="0" />
+                <Setter Property="Height" Value="34" />
+                <Setter Property="Margin" Value="0 0 2 4" />
+                <Setter Property="FontFamily" Value="monospace" />
+                <Setter Property="FontSize" Value="12" />
+                <Setter Property="Foreground" Value="{StaticResource TextPrimary}" />
+            </Style>
+            <Style Selector="Button.PhoneBlock.Aligned">
+                <Setter Property="Background" Value="{StaticResource StatusSuccess}" />
+            </Style>
+            <Style Selector="Button.PhoneBlock.Estimated">
+                <Setter Property="Background" Value="{StaticResource StatusWarning}" />
+            </Style>
+
+            <!-- Inspector correspondence chips (#15): a Match reads as ordinary text, a
+                 substitution/insertion/deletion is visibly flagged. -->
+            <Style Selector="Border.AlignmentChip">
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="CornerRadius" Value="3" />
+                <Setter Property="Padding" Value="6 2" />
+                <Setter Property="Margin" Value="0 0 4 4" />
+                <Setter Property="Background" Value="{StaticResource BgInput}" />
+            </Style>
+            <Style Selector="Border.AlignmentChip.Problem">
+                <Setter Property="Background" Value="{StaticResource StatusErrorMuted}" />
+            </Style>
+            <Style Selector="Border.AlignmentChip TextBlock">
+                <Setter Property="FontFamily" Value="monospace" />
+                <Setter Property="FontSize" Value="12" />
+            </Style>
+
             <!-- ══ TABS ══ -->
 
             <Style Selector="TabControl">

@@ -14,7 +14,13 @@ public sealed record PhoneStreamEntry(
     Guid? WordId,
     string? WordText,
     double? StartSeconds,
-    double? EndSeconds)
+    double? EndSeconds,
+    // Milestone 15 (#15): whether this phoneme's timing came from a real per-phone Phone row
+    // (MFA alignment ran) versus inheriting its whole word's single span - the distinction the
+    // inspector needs to visibly label a phone block "aligned" vs "estimated" (handoff §49).
+    // Derived once here rather than re-derived from timing shape at display time, since a
+    // single-phoneme word's aligned and estimated spans are otherwise indistinguishable.
+    bool IsPhoneLevelAligned = false)
 {
     public static PhoneStreamEntry Boundary() => new(PhoneToken.Boundary, null, null, null, null, null, null);
 
@@ -22,6 +28,6 @@ public sealed record PhoneStreamEntry(
 
     public static PhoneStreamEntry Phoneme(
         string symbol, Guid mediaId, Guid segmentId, Guid wordId, string wordText,
-        double? startSeconds, double? endSeconds) =>
-        new(PhoneToken.Phoneme(symbol), mediaId, segmentId, wordId, wordText, startSeconds, endSeconds);
+        double? startSeconds, double? endSeconds, bool isPhoneLevelAligned) =>
+        new(PhoneToken.Phoneme(symbol), mediaId, segmentId, wordId, wordText, startSeconds, endSeconds, isPhoneLevelAligned);
 }

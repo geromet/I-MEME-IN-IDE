@@ -11,11 +11,32 @@ namespace MemeSearcher.Tests.ViewModels;
 /// </summary>
 public class JobsPanelViewModelTests
 {
+    /// <summary>
+    /// In the real app, JobsPanelViewModel.Rebuild() always runs on the UI thread (every await in
+    /// JobQueueService.RunAsync resumes on the SynchronizationContext captured when Enqueue was
+    /// called from a UI command), so a bound ItemsControl never sees it mutate concurrently. Plain
+    /// xunit has no such context, so this poll's own read of panel.Jobs can race Rebuild()'s
+    /// Clear()/Add() on a thread-pool thread - a transient "collection was modified" here just
+    /// means "state changed mid-check", not a real failure, so it's treated as "not yet" rather
+    /// than propagated.
+    /// </summary>
     private static async Task WaitUntilAsync(Func<bool> condition, int timeoutMs = 2000)
     {
         var elapsed = 0;
-        while (!condition() && elapsed < timeoutMs)
+        while (elapsed < timeoutMs)
         {
+            try
+            {
+                if (condition())
+                {
+                    return;
+                }
+            }
+            catch (InvalidOperationException)
+            {
+                // Collection was modified concurrently - try again next tick.
+            }
+
             await Task.Delay(10);
             elapsed += 10;
         }

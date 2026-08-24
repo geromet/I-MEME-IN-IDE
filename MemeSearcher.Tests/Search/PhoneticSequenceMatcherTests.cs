@@ -158,4 +158,72 @@ public class PhoneticSequenceMatcherTests
 
         Assert.Equal([(0, 0), (1, 1), (2, 2)], match.Correspondences);
     }
+
+    /// <summary>#15: an exact subsequence's alignment steps must all be Match, not Substitute - the DP's own Move.Substitute covers both, so the conversion has to tell them apart by symbol equality.</summary>
+    [Fact]
+    public void FindMatches_ExactSubsequence_AlignmentStepsAreAllMatch()
+    {
+        var query = Phonemes("s", "æ", "t");
+        var candidate = Phonemes("s", "æ", "t");
+
+        var match = Assert.Single(PhoneticSequenceMatcher.FindMatches(query, candidate, DefaultOptions));
+
+        Assert.Equal(3, match.AlignmentSteps.Count);
+        Assert.All(match.AlignmentSteps, s => Assert.Equal(AlignmentOp.Match, s.Op));
+        Assert.Equal([(0, 0), (1, 1), (2, 2)], match.AlignmentSteps.Select(s => (s.QueryIndex, s.CandidateIndex)));
+    }
+
+    [Fact]
+    public void FindMatches_CloseSubstitution_AlignmentStepIsSubstituteAtTheRightIndex()
+    {
+        var candidate = Phonemes("ə", "s");
+        var query = Phonemes("ə", "z");
+
+        var match = Assert.Single(PhoneticSequenceMatcher.FindMatches(query, candidate, DefaultOptions));
+
+        Assert.Equal(AlignmentOp.Match, match.AlignmentSteps[0].Op);
+        Assert.Equal(AlignmentOp.Substitute, match.AlignmentSteps[1].Op);
+        Assert.Equal((1, 1), (match.AlignmentSteps[1].QueryIndex, match.AlignmentSteps[1].CandidateIndex));
+    }
+
+    /// <summary>Query has a phoneme the candidate doesn't - QueryExtra, with no CandidateIndex.</summary>
+    [Fact]
+    public void FindMatches_QueryLongerThanCandidate_ProducesAQueryExtraStep()
+    {
+        var candidate = Phonemes("k", "æ");
+        var query = Phonemes("k", "æ", "t");
+
+        var match = Assert.Single(PhoneticSequenceMatcher.FindMatches(query, candidate, DefaultOptions));
+
+        var extra = Assert.Single(match.AlignmentSteps, s => s.Op == AlignmentOp.QueryExtra);
+        Assert.Equal(2, extra.QueryIndex);
+        Assert.Null(extra.CandidateIndex);
+    }
+
+    /// <summary>
+    /// Candidate has a phoneme the query doesn't - CandidateExtra, with no QueryIndex. The extra
+    /// phoneme is placed in the middle, not at the match's start: free-start alignment lets the
+    /// query begin at any candidate column for free, so an extra phoneme at the very start is
+    /// ambiguous with "skip it as an unmatched prefix and substitute the query's first phoneme
+    /// against whatever comes after it instead" - which is what a first version of this test
+    /// actually found the DP preferring, once it happened to be cheaper than paying the deletion
+    /// cost outright.
+    /// </summary>
+    [Fact]
+    public void FindMatches_CandidateHasAnExtraPhoneme_ProducesACandidateExtraStep()
+    {
+        var candidate = Phonemes("k", "æ", "r", "t");
+        var query = Phonemes("k", "æ", "t");
+
+        // Deletion (candidate-extra) made cheap relative to substitution, so the DP can't prefer
+        // substituting the extra phoneme against a query phoneme instead of just dropping it -
+        // otherwise which one wins depends on how phonetically close "r" happens to be scored
+        // against the query's phonemes, which a first version of this test learned the hard way.
+        var options = DefaultOptions with { InsertionCost = 0.05 };
+        var match = Assert.Single(PhoneticSequenceMatcher.FindMatches(query, candidate, options));
+
+        var extra = Assert.Single(match.AlignmentSteps, s => s.Op == AlignmentOp.CandidateExtra);
+        Assert.Equal(2, extra.CandidateIndex);
+        Assert.Null(extra.QueryIndex);
+    }
 }
