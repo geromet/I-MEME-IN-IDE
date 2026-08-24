@@ -135,8 +135,14 @@ public class FFmpegClipExtractor(FFmpegToolLocator toolLocator)
         using var process = Process.Start(startInfo.ApplyToolEnvironment(status))
             ?? throw new InvalidOperationException($"Failed to start '{status.ExecutablePath}'.");
 
+        // Both streams must be drained concurrently with waiting for exit, not just stderr - a
+        // redirected pipe nobody reads fills its OS buffer, and the process then blocks forever
+        // on write() while this method blocks forever on WaitForExitAsync (#33's follow-up: found
+        // this exact deadlock in MfaAlignmentProvider's identical pattern, live, on a real run).
+        var stdoutTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
         var stderrTask = process.StandardError.ReadToEndAsync(cancellationToken);
         await ProcessRunner.WaitForExitAndKillOnCancelAsync(process, cancellationToken);
+        await stdoutTask; // discarded - only draining the pipe matters, not its content.
 
         if (process.ExitCode != 0 || !File.Exists(outputPath))
         {

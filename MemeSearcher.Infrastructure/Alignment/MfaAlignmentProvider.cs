@@ -190,8 +190,17 @@ public partial class MfaAlignmentProvider(
         using var process = Process.Start(startInfo.ApplyToolEnvironment(status))
             ?? throw new InvalidOperationException($"Failed to start '{status.ExecutablePath}'.");
 
+        // Both streams must be drained concurrently with waiting for exit, not just stderr - a
+        // long alignment run (mfa's own progress/summary output) can write more than a pipe's OS
+        // buffer holds, and with nobody reading stdout, mfa blocks on that write() forever while
+        // this method blocks forever on WaitForExitAsync. Observed directly: a real 19-minute
+        // recording finished its actual alignment work (per mfa's own log) within a minute, then
+        // the process sat idle for over an hour before this fix, doing nothing but waiting on a
+        // full stdout pipe nobody was reading.
+        var stdoutTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
         var stderrTask = process.StandardError.ReadToEndAsync(cancellationToken);
         await ProcessRunner.WaitForExitAndKillOnCancelAsync(process, cancellationToken);
+        await stdoutTask; // discarded - only draining the pipe matters, not its content.
 
         if (process.ExitCode != 0)
         {
