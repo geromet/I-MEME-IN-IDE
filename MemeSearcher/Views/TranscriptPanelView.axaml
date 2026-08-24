@@ -46,10 +46,32 @@
         <ListBox x:Name="CueList" ItemsSource="{Binding ActiveTab.Cues}" IsVisible="{Binding HasTabs}">
             <ListBox.ItemTemplate>
                 <DataTemplate x:DataType="vm:TranscriptCueViewModel">
-                    <Border Classes="TranscriptCue" Classes.Highlighted="{Binding IsHighlighted}" Padding="6,4">
+                    <Border Classes="TranscriptCue" Classes.Highlighted="{Binding IsHighlighted}"
+                            Classes.WordLevel="{Binding HasWordHighlights}" Padding="6,4">
                         <StackPanel Spacing="2">
                             <TextBlock Classes="FieldLabel" Text="{Binding TimeRangeDisplay}" IsVisible="{Binding HasTiming}" />
-                            <TextBlock Text="{Binding Text}" TextWrapping="Wrap" Foreground="{StaticResource TextPrimary}" />
+                            <!-- The exact cue text (real casing/punctuation) is the default display.
+                                 Word.Text is normalized (lowercased, punctuation stripped) by
+                                 TextNormalizer before phonemization, so it isn't fit to stand in for
+                                 the line in general - only swapped in when a match actually resolved
+                                 to specific words, since pointing at the right word matters more
+                                 there than exact surface form (#26 Part 2). -->
+                            <TextBlock Text="{Binding Text}" TextWrapping="Wrap" Foreground="{StaticResource TextPrimary}"
+                                       IsVisible="{Binding !HasWordHighlights}" />
+                            <ItemsControl ItemsSource="{Binding Words}" IsVisible="{Binding HasWordHighlights}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <WrapPanel Orientation="Horizontal" />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:TranscriptWordViewModel">
+                                        <Border Classes="TranscriptWord" Classes.Highlighted="{Binding IsHighlighted}" Margin="0,0,4,0" Padding="2,0">
+                                            <TextBlock Text="{Binding Text}" TextWrapping="Wrap" Foreground="{StaticResource TextPrimary}" />
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
                         </StackPanel>
                     </Border>
                 </DataTemplate>

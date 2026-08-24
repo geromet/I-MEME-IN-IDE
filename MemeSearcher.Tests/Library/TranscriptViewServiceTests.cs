@@ -1,3 +1,4 @@
+using System.Linq;
 using MemeSearcher.Core.Interfaces;
 using MemeSearcher.Infrastructure.Database;
 using MemeSearcher.Infrastructure.Ffmpeg;
@@ -76,6 +77,11 @@ public class TranscriptViewServiceTests : IDisposable
         Assert.Equal(2.0, cues[0].EndSeconds);
         Assert.Equal("general kenobi", cues[1].Text);
         Assert.Equal(5.0, cues[1].StartSeconds);
+
+        // #26 Part 2: word-level highlighting needs each cue's own words, in order, tagged with
+        // whether their timing is a real measurement or MediaIngestionService's interpolated guess.
+        Assert.Equal(["hello", "there"], cues[0].Words.Select(w => w.Text));
+        Assert.All(cues[0].Words, w => Assert.True(w.IsTimingInterpolated));
     }
 
     [Fact]

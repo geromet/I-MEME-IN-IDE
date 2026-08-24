@@ -1,5 +1,6 @@
 using System.Linq;
 using MemeSearcher.Core.Interfaces;
+using MemeSearcher.Core.Phonetics;
 using MemeSearcher.Core.Search;
 using MemeSearcher.Infrastructure.Database;
 using MemeSearcher.Infrastructure.Ffmpeg;
@@ -68,6 +69,45 @@ public class TranscriptPanelViewModelTests : IDisposable
         return result.Media.Id;
     }
 
+    /// <summary>Imports "hello world" as one cue, then realigns it with a fake provider carrying real per-word timing - the counterpart to ImportAsync, which leaves timing interpolated.</summary>
+    private static async Task<Guid> ImportAndRealignAsync(IDbContextFactory<MemeSearcherDbContext> factory, IPhonemizer phonemizer, string tempDir)
+    {
+        var mediaPath = Path.Combine(tempDir, "clip.mp4");
+        await File.WriteAllTextAsync(mediaPath, "placeholder - never decoded, the aligner is faked");
+        var srtPath = Path.Combine(tempDir, "clip.srt");
+        await File.WriteAllTextAsync(srtPath, """
+            1
+            00:00:01,000 --> 00:00:03,000
+            hello world
+
+            """);
+
+        await using (var importContext = await factory.CreateDbContextAsync())
+        {
+            await new MediaIngestionService(
+                importContext, TranscriptParserFactory.CreateDefault(), phonemizer,
+                new UnusedTranscriptionProvider(), new MediaMetadataProbe(new FFprobeToolLocator()))
+                .ImportAsync(new MediaIngestionRequest(mediaPath, srtPath, "en-US"));
+        }
+
+        var aligner = new FakeAlignmentProvider(new AlignmentResult(
+            [new AlignedWord("hello", 1.0, 1.7), new AlignedWord("world", 1.7, 3.0)],
+            [
+                new AlignedPhone("HH", 1.0, 1.2), new AlignedPhone("AH0", 1.2, 1.4),
+                new AlignedPhone("L", 1.4, 1.55), new AlignedPhone("OW1", 1.55, 1.7),
+                new AlignedPhone("W", 1.7, 1.9), new AlignedPhone("ER1", 1.9, 2.4),
+                new AlignedPhone("L", 2.4, 2.7), new AlignedPhone("D", 2.7, 3.0),
+            ]));
+
+        await using var context = await factory.CreateDbContextAsync();
+        var media = await context.Media.SingleAsync();
+        await new MediaIngestionService(
+            context, TranscriptParserFactory.CreateDefault(), phonemizer,
+            new UnusedTranscriptionProvider(), new MediaMetadataProbe(new FFprobeToolLocator()), aligner)
+            .RealignAsync(media.Id);
+        return media.Id;
+    }
+
     private static SearchResultRowViewModel MakeRow(SearchResult result) => new(
         result, new FakeMediaPlayerLauncher(), new FakeClipboardService(),
         new FFmpegClipExtractor(new FFmpegToolLocator()), new FakeFilePickerService());
@@ -119,6 +159,44 @@ public class TranscriptPanelViewModelTests : IDisposable
         Assert.True(tab.Cues[0].IsHighlighted);
         Assert.False(tab.Cues[1].IsHighlighted);
         Assert.Same(tab.Cues[0], tab.ScrollTarget);
+
+        // A plain SRT import has no real per-word timing - MediaIngestionService interpolates it
+        // character-proportionally, so Word.IsTimingInterpolated is true. The panel must not point
+        // at a specific word on the strength of a guess: it should fall back to the cue-level
+        // highlight above rather than lighting up individual words (#26 Part 2).
+        Assert.False(tab.Cues[0].HasWordHighlights);
+        Assert.All(tab.Cues[0].Words, w => Assert.False(w.IsHighlighted));
+    }
+
+    /// <summary>#26 Part 2: once realignment gives a word real (non-interpolated) timing, a match resolved to that word highlights just that word instead of falling back to the whole cue.</summary>
+    [Fact]
+    public async Task ShowAsync_AfterRealignment_HighlightsTheMatchedWordNotTheWholeCue()
+    {
+        var setup = await TrySetUpAsync();
+        if (setup is null)
+        {
+            return;
+        }
+
+        var (phonemizer, factory) = setup.Value;
+        await ImportAndRealignAsync(factory, phonemizer, _tempDir);
+
+        var searchService = new PhoneticSearchService(factory, phonemizer, new InMemoryQueryPhonemizationCache());
+        var results = await searchService.SearchAsync("hello", "en-US", new SearchScope.AllIndexedMedia());
+        var row = MakeRow(results.OrderByDescending(r => r.Score).First());
+
+        var panel = new TranscriptPanelViewModel(new TranscriptViewService(factory), new LibraryService(factory));
+        await panel.ShowAsync(row);
+
+        var tab = Assert.Single(panel.Tabs);
+        var cue = Assert.Single(tab.Cues);
+        Assert.True(cue.IsHighlighted);
+        Assert.True(cue.HasWordHighlights);
+
+        var hello = Assert.Single(cue.Words, w => w.Text == "hello");
+        var world = Assert.Single(cue.Words, w => w.Text == "world");
+        Assert.True(hello.IsHighlighted);
+        Assert.False(world.IsHighlighted);
     }
 
     [Fact]

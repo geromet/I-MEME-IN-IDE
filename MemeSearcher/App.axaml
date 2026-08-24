@@ -247,6 +247,17 @@
                 <Setter Property="Background" Value="{StaticResource AccentMuted}" />
                 <Setter Property="BorderBrush" Value="{StaticResource Accent}" />
             </Style>
+            <!-- Word-level highlighting (#26 Part 2) takes over from the cue's own full-line tint -
+                 the accent border stays (still the "this line has a match" marker) but the
+                 background goes back to transparent so the per-word pills below aren't washed out
+                 against an already-tinted line. -->
+            <Style Selector="Border.TranscriptCue.Highlighted.WordLevel">
+                <Setter Property="Background" Value="Transparent" />
+            </Style>
+            <Style Selector="Border.TranscriptWord.Highlighted">
+                <Setter Property="Background" Value="{StaticResource Accent}" />
+                <Setter Property="CornerRadius" Value="2" />
+            </Style>
 
             <!-- ══ TABS ══ -->
 

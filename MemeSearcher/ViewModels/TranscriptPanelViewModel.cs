@@ -82,7 +82,11 @@ public partial class TranscriptPanelViewModel(TranscriptViewService transcriptVi
 
         if (segmentIds.Count > 0)
         {
-            tab.HighlightSegments(segmentIds);
+            var wordIds = result.MatchedPhoneDetails
+                .Where(p => p.WordId is not null)
+                .Select(p => p.WordId!.Value)
+                .ToHashSet();
+            tab.HighlightMatches(segmentIds, wordIds);
         }
         else
         {

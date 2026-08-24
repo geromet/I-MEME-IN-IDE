@@ -37,17 +37,41 @@ public partial class TranscriptTabViewModel : ObservableObject
     /// them. A match can straddle two cues (the matcher aligns across segment boundaries the same
     /// way it does word boundaries) - highlighting only the first would silently drop the second
     /// half of a straddling match from view.
+    ///
+    /// Within a highlighted cue, individual matched words light up instead of the whole line (#26
+    /// Part 2) only when every matched word in that cue has real, non-interpolated timing - a cue
+    /// with even one matched word whose timing is a character-proportional guess falls back to a
+    /// whole-cue highlight rather than pointing confidently at one specific (possibly wrong) word.
+    /// Likewise a match with no WordId at all for a cue (shouldn't happen via the normal search
+    /// path, but MatchedPhone.WordId is nullable) falls back the same way.
     /// </summary>
-    public void HighlightSegments(IReadOnlySet<Guid> segmentIds)
+    public void HighlightMatches(IReadOnlySet<Guid> segmentIds, IReadOnlySet<Guid> wordIds)
     {
         TranscriptCueViewModel? firstMatch = null;
 
         foreach (var cue in Cues)
         {
             cue.IsHighlighted = segmentIds.Contains(cue.SegmentId);
-            if (cue.IsHighlighted)
+
+            if (!cue.IsHighlighted)
             {
-                firstMatch ??= cue;
+                cue.HasWordHighlights = false;
+                foreach (var word in cue.Words)
+                {
+                    word.IsHighlighted = false;
+                }
+                continue;
+            }
+
+            firstMatch ??= cue;
+
+            var matchedWords = cue.Words.Where(w => wordIds.Contains(w.WordId)).ToList();
+            var trustworthy = matchedWords.Count > 0 && matchedWords.All(w => !w.IsTimingInterpolated);
+            cue.HasWordHighlights = trustworthy;
+
+            foreach (var word in cue.Words)
+            {
+                word.IsHighlighted = trustworthy && wordIds.Contains(word.WordId);
             }
         }
 
@@ -59,6 +83,11 @@ public partial class TranscriptTabViewModel : ObservableObject
         foreach (var cue in Cues)
         {
             cue.IsHighlighted = false;
+            cue.HasWordHighlights = false;
+            foreach (var word in cue.Words)
+            {
+                word.IsHighlighted = false;
+            }
         }
     }
 }
