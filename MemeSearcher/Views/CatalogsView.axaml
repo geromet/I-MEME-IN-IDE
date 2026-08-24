@@ -41,7 +41,8 @@
                 <ListBox.ItemTemplate>
                     <DataTemplate x:DataType="vm:CatalogRowViewModel">
                         <Border Padding="10" Margin="0,3" BorderThickness="1" BorderBrush="{StaticResource BorderMid}" CornerRadius="4">
-                            <StackPanel Spacing="4">
+                            <Panel>
+                            <StackPanel Spacing="4" IsVisible="{Binding !IsEditing}">
                                 <TextBlock Text="{Binding Name}" FontSize="14" FontWeight="Bold" Foreground="{StaticResource TextPrimary}" TextWrapping="Wrap" />
                                 <TextBlock Classes="FieldLabel" Text="{Binding Description}" TextWrapping="Wrap" IsVisible="{Binding HasDescription}" />
                                 <TextBlock Classes="HeaderLabel" Text="{Binding MemberCountDisplay}" />
@@ -52,6 +53,11 @@
                                             Command="{Binding #Root.((vm:CatalogsViewModel)DataContext).ApplyToSearchCommand}"
                                             CommandParameter="{Binding}"
                                             ToolTip.Tip="Set the active search scope to exactly this catalog's sources (#13/#20)." />
+                                    <Button Content="Rename"
+                                            Margin="0,0,6,6"
+                                            Command="{Binding #Root.((vm:CatalogsViewModel)DataContext).BeginRenameCommand}"
+                                            CommandParameter="{Binding}"
+                                            IsVisible="{Binding !IsPendingDelete}" />
                                     <Button Content="Delete"
                                             Margin="0,0,6,6"
                                             Command="{Binding #Root.((vm:CatalogsViewModel)DataContext).DeleteCommand}"
@@ -70,6 +76,23 @@
                                             IsVisible="{Binding IsPendingDelete}" />
                                 </WrapPanel>
                             </StackPanel>
+
+                            <StackPanel Spacing="4" IsVisible="{Binding IsEditing}">
+                                <TextBox Text="{Binding EditName}" PlaceholderText="Catalog name" />
+                                <TextBox Text="{Binding EditDescription}" PlaceholderText="Description (optional)" />
+
+                                <WrapPanel Margin="0,4,0,0">
+                                    <Button Content="Save"
+                                            Margin="0,0,6,6"
+                                            Command="{Binding #Root.((vm:CatalogsViewModel)DataContext).SaveRenameCommand}"
+                                            CommandParameter="{Binding}" />
+                                    <Button Content="Cancel"
+                                            Margin="0,0,6,6"
+                                            Command="{Binding #Root.((vm:CatalogsViewModel)DataContext).CancelRenameCommand}"
+                                            CommandParameter="{Binding}" />
+                                </WrapPanel>
+                            </StackPanel>
+                            </Panel>
                         </Border>
                     </DataTemplate>
                 </ListBox.ItemTemplate>

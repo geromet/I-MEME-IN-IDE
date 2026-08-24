@@ -159,6 +159,34 @@ public partial class CatalogsViewModel(
     [RelayCommand]
     private void CancelDelete(CatalogRowViewModel catalog) => catalog.IsPendingDelete = false;
 
+    [RelayCommand]
+    private void BeginRename(CatalogRowViewModel catalog)
+    {
+        catalog.EditName = catalog.Name;
+        catalog.EditDescription = catalog.Description ?? "";
+        catalog.IsEditing = true;
+    }
+
+    [RelayCommand]
+    private void CancelRename(CatalogRowViewModel catalog) => catalog.IsEditing = false;
+
+    [RelayCommand]
+    private async Task SaveRenameAsync(CatalogRowViewModel catalog)
+    {
+        var name = catalog.EditName.Trim();
+        if (name.Length == 0)
+        {
+            SetError("Enter a name for the catalog.");
+            return;
+        }
+
+        var description = catalog.EditDescription.Trim();
+        await catalogService.RenameAsync(catalog.Id, name, description.Length == 0 ? null : description);
+
+        await LoadAsync();
+        StatusMessage = $"Renamed catalog to \"{name}\".";
+    }
+
     /// <summary>
     /// "Select a catalog as the active search scope" (#20) - bulk-applies this catalog's membership
     /// onto Media.IsSelectedForSearch, then reloads the shared LibraryViewModel so every open search
