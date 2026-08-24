@@ -80,7 +80,7 @@ public partial class SearchResultRowViewModel : ObservableObject
             : "no timing";
         SourceText = result.SourceText;
         Ipa = result.Ipa;
-        PhonemesDisplay = string.Join(' ', result.MatchPhonemes);
+        PhonemesDisplay = string.Join(' ', result.Phonemes);
         MatchedPhoneDetails = result.MatchedPhoneDetails;
         AlignmentSteps = result.AlignmentSteps;
     }

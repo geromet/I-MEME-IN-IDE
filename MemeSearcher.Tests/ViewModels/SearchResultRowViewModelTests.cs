@@ -14,7 +14,7 @@ public class SearchResultRowViewModelTests
         EndSeconds: 14.0,
         SourceText: "a long bus",
         Ipa: "ə lɔŋ bʌs",
-        MatchPhonemes: ["ə", "l", "ɔ", "ŋ", "b", "ʌ", "s"],
+        Phonemes: ["ə", "l", "ɔ", "ŋ", "b", "ʌ", "s"],
         QueryPhonemes: ["ɐ", "m", "ʌ", "ŋ", "ʌ", "s"],
         Score: 0.87);
 

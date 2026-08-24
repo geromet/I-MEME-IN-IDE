@@ -304,8 +304,8 @@ public class PhoneticSearchService(
         var startSeconds = phonemeEntries.Count > 0 ? phonemeEntries[0].StartSeconds : null;
         var endSeconds = phonemeEntries.Count > 0 ? phonemeEntries[^1].EndSeconds : null;
 
-        var sourceText = string.Join(' ', DistinctConsecutiveWords(phonemeEntries));
-        var ipa = string.Join(' ', GroupByWord(phonemeEntries).Select(g => string.Concat(g)));
+        var sourceText = PhoneStreamTextBuilder.BuildSourceText(phonemeEntries);
+        var ipa = PhoneStreamTextBuilder.BuildIpa(phonemeEntries);
         var matchPhonemes = phonemeEntries.Select(e => e.Token.Symbol).ToList();
         var queryPhonemes = queryTokens.Where(t => !t.IsBoundary).Select(t => t.Symbol).ToList();
 
@@ -332,43 +332,8 @@ public class PhoneticSearchService(
             : match.Cost == 0 ? 1.0 : 0.0;
 
         return new SearchResult(
-            mediaId, startSeconds, endSeconds, sourceText, ipa, matchPhonemes, queryPhonemes, score,
+            mediaId, startSeconds, endSeconds, sourceText, ipa, matchPhonemes, score, queryPhonemes,
             matchedPhoneDetails, alignmentSteps);
     }
 
-    private static IEnumerable<string> DistinctConsecutiveWords(IReadOnlyList<PhoneStreamEntry> phonemeEntries)
-    {
-        Guid? lastWordId = null;
-        foreach (var entry in phonemeEntries)
-        {
-            if (entry.WordId != lastWordId)
-            {
-                yield return entry.WordText!;
-                lastWordId = entry.WordId;
-            }
-        }
-    }
-
-    private static IEnumerable<IEnumerable<string>> GroupByWord(IReadOnlyList<PhoneStreamEntry> phonemeEntries)
-    {
-        var currentWordId = (Guid?)null;
-        var currentGroup = new List<string>();
-
-        foreach (var entry in phonemeEntries)
-        {
-            if (entry.WordId != currentWordId && currentGroup.Count > 0)
-            {
-                yield return currentGroup;
-                currentGroup = [];
-            }
-
-            currentGroup.Add(entry.Token.Symbol);
-            currentWordId = entry.WordId;
-        }
-
-        if (currentGroup.Count > 0)
-        {
-            yield return currentGroup;
-        }
-    }
 }

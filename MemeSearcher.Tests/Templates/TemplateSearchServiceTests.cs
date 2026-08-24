@@ -142,7 +142,7 @@ public class TemplateSearchServiceTests : IDisposable
         var outcome = await templateSearchService.SearchAsync(templateId);
 
         Assert.NotEmpty(outcome.Results);
-        Assert.Contains("ʁ", Assert.Single(outcome.Results).MatchPhonemes);
+        Assert.Contains("ʁ", Assert.Single(outcome.Results).Phonemes);
     }
 
     [Fact]

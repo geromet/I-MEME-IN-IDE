@@ -26,7 +26,7 @@ public class InspectorViewModelTests
             EndSeconds: 2.0,
             SourceText: "hello",
             Ipa: "hɛloʊ",
-            MatchPhonemes: matchedPhoneDetails.Select(p => p.Symbol).ToList(),
+            Phonemes: matchedPhoneDetails.Select(p => p.Symbol).ToList(),
             QueryPhonemes: matchedPhoneDetails.Select(p => p.Symbol).ToList(),
             Score: 0.9,
             MatchedPhoneDetails: matchedPhoneDetails,

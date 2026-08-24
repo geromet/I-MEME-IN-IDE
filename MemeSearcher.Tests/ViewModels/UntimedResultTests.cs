@@ -15,7 +15,7 @@ public class UntimedResultTests
 {
     private static SearchResultRowViewModel Row(double? start, double? end) =>
         new(
-            new SearchResult(Guid.NewGuid(), start, end, "een", "eːn", ["eː", "n"], ["eː", "n"], 0.9),
+            new SearchResult(Guid.NewGuid(), start, end, "een", "eːn", ["eː", "n"], 0.9, ["eː", "n"]),
             new FakeMediaPlayerLauncher(),
             new FakeClipboardService(),
             new FFmpegClipExtractor(new FFmpegToolLocator()),

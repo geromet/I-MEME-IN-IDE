@@ -18,9 +18,12 @@ public record MatchedPhone(string Symbol, double? StartSeconds, double? EndSecon
 public record QueryAlignmentStep(AlignmentOp Op, string? QuerySymbol, string? MatchSymbol);
 
 /// <summary>
-/// Timing is nullable because a match can come from a transcript that never had any (#32). A
-/// result without timing cannot be played, clipped, or timestamped, and must not pretend to be at
-/// zero seconds.
+/// A single-source match. Adds the query-side context (the phonemes it was searched against) and
+/// #15's rich per-phone/alignment detail on top of the MatchComponent shape it shares with
+/// composite results (#17) - Phonemes (inherited) is the matched phonemes, not the query's;
+/// QueryPhonemes is this result's own copy since a single-source result stands alone (composite
+/// hoists the same data to CompositeSearchResult's top level instead, since every component of one
+/// composite result was searched against the same query).
 /// </summary>
 public record SearchResult(
     Guid MediaId,
@@ -28,11 +31,12 @@ public record SearchResult(
     double? EndSeconds,
     string SourceText,
     string Ipa,
-    IReadOnlyList<string> MatchPhonemes,
-    IReadOnlyList<string> QueryPhonemes,
+    IReadOnlyList<string> Phonemes,
     double Score,
+    IReadOnlyList<string> QueryPhonemes,
     IReadOnlyList<MatchedPhone>? MatchedPhoneDetails = null,
     IReadOnlyList<QueryAlignmentStep>? AlignmentSteps = null)
+    : MatchComponent(MediaId, StartSeconds, EndSeconds, SourceText, Ipa, Phonemes, Score)
 {
     public IReadOnlyList<MatchedPhone> MatchedPhoneDetails { get; init; } = MatchedPhoneDetails ?? [];
 

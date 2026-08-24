@@ -174,8 +174,8 @@ public class AlignedPhoneSearchTests : IDisposable
 
         var match = Assert.Single(results);
 
-        Assert.Contains("ɛ", match.MatchPhonemes);
-        Assert.DoesNotContain("ə", match.MatchPhonemes);
+        Assert.Contains("ɛ", match.Phonemes);
+        Assert.DoesNotContain("ə", match.Phonemes);
     }
 
     /// <summary>
