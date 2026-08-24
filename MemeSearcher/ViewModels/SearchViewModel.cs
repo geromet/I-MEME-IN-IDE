@@ -51,6 +51,8 @@ public partial class SearchViewModel(
 
     // Milestone 4: single-source is the default per addendum §17 - composite must be opt-in.
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowFlatResults))]
+    [NotifyPropertyChangedFor(nameof(ShowGroupedResults))]
     private bool _isCompositeMode;
 
     /// <summary>
@@ -94,6 +96,21 @@ public partial class SearchViewModel(
     private double _minimumCoverage;
 
     partial void OnMinimumCoverageChanged(double value) => ApplyResultSortAndFilter();
+
+    /// <summary>#25 exit criterion 4: "many hits are the same word from different timestamps - grouping by covered span is more useful than a flat ranked list." Opt-in, alongside the flat list rather than replacing it.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowFlatResults))]
+    [NotifyPropertyChangedFor(nameof(ShowGroupedResults))]
+    private bool _groupByCoverage;
+
+    partial void OnGroupByCoverageChanged(bool value) => ApplyResultSortAndFilter();
+
+    /// <summary>Avalonia's compiled bindings can't evaluate "&amp;&amp;" inline in a binding path - these exist so the view has something to bind IsVisible to directly.</summary>
+    public bool ShowFlatResults => !IsCompositeMode && !GroupByCoverage;
+
+    public bool ShowGroupedResults => !IsCompositeMode && GroupByCoverage;
+
+    public ObservableCollection<ResultGroupViewModel> ResultGroups { get; } = [];
 
     /// <summary>Milestone 15 (#15): the result the shared Inspector panel currently shows, bound to the results ListBox's SelectedItem.</summary>
     [ObservableProperty]
@@ -256,10 +273,21 @@ public partial class SearchViewModel(
     private void ApplyResultSortAndFilter()
     {
         var previousSelection = SelectedResult;
+        var filtered = ResultSortFilter.Apply(_allResults, SortMode, MinimumCoverage).ToList();
+
         Results.Clear();
-        foreach (var row in ResultSortFilter.Apply(_allResults, SortMode, MinimumCoverage))
+        foreach (var row in filtered)
         {
             Results.Add(row);
+        }
+
+        ResultGroups.Clear();
+        if (GroupByCoverage)
+        {
+            foreach (var group in ResultGrouping.GroupByCoveredSpan(filtered))
+            {
+                ResultGroups.Add(group);
+            }
         }
 
         SelectedResult = previousSelection is not null && Results.Contains(previousSelection) ? previousSelection : null;
@@ -269,6 +297,7 @@ public partial class SearchViewModel(
     {
         SelectedResult = null;
         Results.Clear();
+        ResultGroups.Clear();
         _allResults = [];
 
         var results = await compositeSearchService.SearchAsync(QueryText, Language, scope);

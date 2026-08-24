@@ -9,6 +9,41 @@
              x:Class="MemeSearcher.Views.SearchView"
              x:DataType="vm:SearchViewModel"
              x:Name="Root">
+    <UserControl.Resources>
+        <!-- #25: shared between the flat results list and the grouped-by-covered-span view below,
+             so grouping doesn't mean maintaining two copies of the same row markup. -->
+        <DataTemplate x:Key="ResultRowTemplate" x:DataType="vm:SearchResultRowViewModel">
+            <Border Padding="8" Margin="0,2" BorderThickness="0,0,0,1" BorderBrush="{StaticResource BorderMid}">
+                <StackPanel Spacing="2">
+                    <StackPanel Orientation="Horizontal" Spacing="12">
+                        <TextBlock Text="{Binding ScoreDisplay}" FontWeight="Bold" Foreground="{StaticResource TextPrimary}" />
+                        <TextBlock Classes="HeaderLabel" Text="{Binding TimeRangeDisplay}" />
+                    </StackPanel>
+                    <TextBlock Text="{Binding SourceText}" FontSize="15" Foreground="{StaticResource TextPrimary}" />
+                    <TextBlock Text="{Binding Ipa}" FontFamily="monospace" Foreground="{StaticResource TextSecondary}" />
+
+                    <!-- #25: which part of the query this hit covers, and how - the "moeten" case
+                         (five short hits looking like unrelated words) reads correctly once each
+                         row shows the slice of the query it accounts for instead of just an opaque
+                         score. -->
+                    <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,2,0,0">
+                        <views:PhoneCoverageStripView DataContext="{Binding CoverageStrip}" CellWidth="14" CellHeight="14" CellFontSize="8" />
+                        <TextBlock Classes="FieldLabel" Text="{Binding CoverageDisplay}" VerticalAlignment="Center" />
+                    </StackPanel>
+
+                    <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,4,0,0">
+                        <Button Content="▶ Play" Command="{Binding PlayCommand}" />
+                        <Button Content="Export clip..." Command="{Binding ExportClipCommand}" />
+                        <Button Content="Copy timestamp" Command="{Binding CopyTimestampCommand}" />
+                        <Button Content="Copy text" Command="{Binding CopyTextCommand}" />
+                        <Button Content="Copy IPA" Command="{Binding CopyIpaCommand}" />
+                        <Button Content="Copy phonemes" Command="{Binding CopyPhonemesCommand}" />
+                    </StackPanel>
+                    <TextBlock Classes="FieldLabel" Text="{Binding PlaybackStatus}" />
+                </StackPanel>
+            </Border>
+        </DataTemplate>
+    </UserControl.Resources>
     <Grid Margin="16" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,*">
         <Grid Grid.Row="0" ColumnDefinitions="*,Auto" ColumnSpacing="8">
             <TextBox Grid.Column="0"
@@ -72,43 +107,36 @@
                 <Slider Width="120" Minimum="0" Maximum="1" Value="{Binding MinimumCoverage}" VerticalAlignment="Center" />
                 <TextBlock Classes="FieldLabel" Text="{Binding MinimumCoverage, StringFormat='{}{0:P0}'}" VerticalAlignment="Center" />
             </StackPanel>
+            <!-- #25 exit criterion 4: "many hits are the same word from different timestamps -
+                 grouping by covered span is more useful than a flat ranked list." Opt-in, alongside
+                 the flat list rather than replacing it. -->
+            <CheckBox Content="Group by covered span" IsChecked="{Binding GroupByCoverage}" VerticalAlignment="Center" />
         </StackPanel>
 
-        <ListBox Grid.Row="6" ItemsSource="{Binding Results}" SelectedItem="{Binding SelectedResult}" IsVisible="{Binding !IsCompositeMode}">
-            <ListBox.ItemTemplate>
-                <DataTemplate x:DataType="vm:SearchResultRowViewModel">
-                    <Border Padding="8" Margin="0,2" BorderThickness="0,0,0,1" BorderBrush="{StaticResource BorderMid}">
-                        <StackPanel Spacing="2">
-                            <StackPanel Orientation="Horizontal" Spacing="12">
-                                <TextBlock Text="{Binding ScoreDisplay}" FontWeight="Bold" Foreground="{StaticResource TextPrimary}" />
-                                <TextBlock Classes="HeaderLabel" Text="{Binding TimeRangeDisplay}" />
-                            </StackPanel>
-                            <TextBlock Text="{Binding SourceText}" FontSize="15" Foreground="{StaticResource TextPrimary}" />
-                            <TextBlock Text="{Binding Ipa}" FontFamily="monospace" Foreground="{StaticResource TextSecondary}" />
+        <ListBox Grid.Row="6" ItemsSource="{Binding Results}" SelectedItem="{Binding SelectedResult}"
+                 ItemTemplate="{StaticResource ResultRowTemplate}"
+                 IsVisible="{Binding ShowFlatResults}" />
 
-                            <!-- #25: which part of the query this hit covers, and how - the
-                                 "moeten" case (five short hits looking like unrelated words) reads
-                                 correctly once each row shows the slice of the query it accounts
-                                 for instead of just an opaque score. -->
-                            <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,2,0,0">
-                                <views:PhoneCoverageStripView DataContext="{Binding CoverageStrip}" CellWidth="14" CellHeight="14" CellFontSize="8" />
-                                <TextBlock Classes="FieldLabel" Text="{Binding CoverageDisplay}" VerticalAlignment="Center" />
+        <ScrollViewer Grid.Row="6" IsVisible="{Binding ShowGroupedResults}">
+            <ItemsControl ItemsSource="{Binding ResultGroups}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:ResultGroupViewModel">
+                        <StackPanel Margin="0,0,0,12">
+                            <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,0,0,4">
+                                <TextBlock Classes="HeaderLabel" Text="{Binding Label}" FontWeight="Bold" />
+                                <TextBlock Classes="FieldLabel" Text="{Binding Count, StringFormat='({0} result(s))'}" />
                             </StackPanel>
-
-                            <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,4,0,0">
-                                <Button Content="▶ Play" Command="{Binding PlayCommand}" />
-                                <Button Content="Export clip..." Command="{Binding ExportClipCommand}" />
-                                <Button Content="Copy timestamp" Command="{Binding CopyTimestampCommand}" />
-                                <Button Content="Copy text" Command="{Binding CopyTextCommand}" />
-                                <Button Content="Copy IPA" Command="{Binding CopyIpaCommand}" />
-                                <Button Content="Copy phonemes" Command="{Binding CopyPhonemesCommand}" />
-                            </StackPanel>
-                            <TextBlock Classes="FieldLabel" Text="{Binding PlaybackStatus}" />
+                            <!-- A ListBox, not a plain ItemsControl, so a row clicked inside a
+                                 group can still drive the shared Inspector panel (#25/#15) - bound
+                                 to the same SelectedResult the flat list uses, via #Root since this
+                                 template's own DataContext is the group, not the SearchViewModel. -->
+                            <ListBox ItemsSource="{Binding Members}" ItemTemplate="{StaticResource ResultRowTemplate}"
+                                     SelectedItem="{Binding #Root.((vm:SearchViewModel)DataContext).SelectedResult}" />
                         </StackPanel>
-                    </Border>
-                </DataTemplate>
-            </ListBox.ItemTemplate>
-        </ListBox>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
 
         <ListBox Grid.Row="6" ItemsSource="{Binding CompositeResults}" IsVisible="{Binding IsCompositeMode}">
             <ListBox.ItemTemplate>

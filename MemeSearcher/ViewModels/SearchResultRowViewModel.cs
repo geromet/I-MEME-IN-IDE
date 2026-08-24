@@ -69,6 +69,13 @@ public partial class SearchResultRowViewModel : ObservableObject
 
     public string CoverageDisplay => $"{CoverageFraction:P0} covered";
 
+    /// <summary>#25 exit criterion 4: the query phonemes this particular search ran against - needed alongside QueryStart/QueryEnd to group results by which slice of the query they cover, e.g. "maken" and "laten" both covering the same span read as the same group instead of two unrelated rows.</summary>
+    public IReadOnlyList<string> QueryPhonemes { get; }
+
+    public int QueryStart { get; }
+
+    public int QueryEnd { get; }
+
     // Resolved after construction (batched across all results by SearchViewModel), so the
     // Play/Export buttons' enabled state has to react to it arriving.
     [ObservableProperty]
@@ -112,6 +119,9 @@ public partial class SearchResultRowViewModel : ObservableObject
         CoverageFraction = result.QueryPhonemes.Count > 0
             ? coverageCells.Count(c => c.IsMatch || c.IsSubstitute) / (double)result.QueryPhonemes.Count
             : 0;
+        QueryPhonemes = result.QueryPhonemes;
+        QueryStart = result.QueryStart;
+        QueryEnd = result.QueryEnd;
     }
 
     [RelayCommand(CanExecute = nameof(CanPlay))]
