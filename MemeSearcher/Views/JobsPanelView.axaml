@@ -1,0 +1,44 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:MemeSearcher.ViewModels"
+             mc:Ignorable="d" d:DesignWidth="700" d:DesignHeight="180"
+             x:Class="MemeSearcher.Views.JobsPanelView"
+             x:DataType="vm:JobsPanelViewModel"
+             x:Name="Root">
+    <!-- #14: live per-job rows with cancel buttons; a failed job's error stays on its own row after
+         later jobs run, instead of being overwritten by a single shared status line. Extracted into
+         its own UserControl by #19 so it can be registered as a panel instead of living inline in
+         the shell. -->
+    <DockPanel Margin="10">
+        <TextBlock DockPanel.Dock="Top" Classes="PanelHeader" Text="JOBS / ERRORS" Margin="0,0,0,8" />
+        <TextBlock DockPanel.Dock="Top" Classes="FieldLabel" Text="No background jobs yet."
+                   IsVisible="{Binding !HasJobs}" />
+        <ScrollViewer>
+            <ItemsControl ItemsSource="{Binding Jobs}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:JobRowViewModel">
+                        <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,6">
+                            <StackPanel Grid.Column="0">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <TextBlock Text="{Binding KindDisplay}" FontWeight="Bold" />
+                                    <TextBlock Text="{Binding Title}" />
+                                    <TextBlock Text="{Binding StateDisplay}" Classes="FieldLabel" />
+                                </StackPanel>
+                                <TextBlock Classes="FieldLabel" Text="{Binding StatusMessage}"
+                                           IsVisible="{Binding HasStatusMessage}" />
+                                <TextBlock Foreground="{StaticResource StatusError}" TextWrapping="Wrap"
+                                           Text="{Binding Error}" IsVisible="{Binding HasError}" />
+                            </StackPanel>
+                            <Button Grid.Column="1" Classes="Danger" Content="Cancel" VerticalAlignment="Top"
+                                    IsVisible="{Binding IsCancellable}"
+                                    Command="{Binding #Root.((vm:JobsPanelViewModel)DataContext).CancelCommand}"
+                                    CommandParameter="{Binding}" />
+                        </Grid>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+    </DockPanel>
+</UserControl>

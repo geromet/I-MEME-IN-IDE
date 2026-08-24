@@ -11,28 +11,56 @@
         Title="Phonetic Search"
         Width="1280" Height="800"
         MinWidth="960" MinHeight="600">
-    <Grid RowDefinitions="Auto,*,Auto">
+
+    <!-- #19: every panel a zone hosts is resolved by App.axaml's global ViewLocator (by naming
+         convention) - adding a new panel is a DI registration (App.axaml.cs), never an edit here. -->
+    <Grid RowDefinitions="Auto,Auto,*,Auto">
+
+        <!-- ══ MENU (#19: View toggles registered panels, Tools runs library-wide actions) ══ -->
+        <Menu Grid.Row="0" Classes="Toolbar">
+            <MenuItem Header="_View" ItemsSource="{Binding Panels}">
+                <MenuItem.ItemTemplate>
+                    <DataTemplate x:DataType="vm:PanelSlotViewModel">
+                        <MenuItem Header="{Binding DisplayName}" ToggleType="CheckBox" IsChecked="{Binding IsVisible, Mode=TwoWay}" />
+                    </DataTemplate>
+                </MenuItem.ItemTemplate>
+            </MenuItem>
+            <MenuItem Header="_Tools">
+                <MenuItem Header="Add Media..." Command="{Binding Library.ImportCommand}" />
+                <MenuItem Header="Reindex" Command="{Binding Library.ReindexCommand}" />
+            </MenuItem>
+        </Menu>
 
         <!-- ══ TOOLBAR ══ -->
-        <DockPanel Grid.Row="0" Classes="Toolbar" LastChildFill="False">
+        <DockPanel Grid.Row="1" Classes="Toolbar" LastChildFill="False">
             <Button DockPanel.Dock="Left" Classes="Toolbar" Content="Add Media..." Command="{Binding Library.ImportCommand}" />
             <Button DockPanel.Dock="Left" Classes="Toolbar" Content="Reindex" Command="{Binding Library.ReindexCommand}" />
             <Button DockPanel.Dock="Left" Classes="Toolbar" Content="+ New Search" Command="{Binding NewSearchTabCommand}" />
-            <Button DockPanel.Dock="Left" Classes="Toolbar" Content="Jobs / Errors" Command="{Binding ToggleBottomPanelCommand}" />
-            <Button DockPanel.Dock="Right" Classes="Toolbar" Content="Settings..." Click="OnSettingsClick" />
+            <Button DockPanel.Dock="Left" Classes="Toolbar" Content="Jobs / Errors" Command="{Binding ToggleJobsPanelCommand}" />
         </DockPanel>
 
-        <!-- ══ BODY: Library | documents (+ collapsible bottom panel) | Inspector ══ -->
-        <Grid Grid.Row="1" ColumnDefinitions="240,4,*,4,260">
+        <!-- ══ BODY: left zone | documents (+ collapsible bottom zone) | right zone ══ -->
+        <Grid Grid.Row="2" ColumnDefinitions="240,4,*,4,260">
 
-            <!-- LIBRARY (persistent left panel, not a tab) -->
-            <Border Grid.Column="0" Classes="Panel" BorderThickness="0,0,1,0">
-                <views:LibraryView DataContext="{Binding Library}" />
+            <!-- LEFT ZONE (Library by default). -->
+            <Border Grid.Column="0" Classes="Panel" BorderThickness="0,0,1,0" IsVisible="{Binding HasLeftPanels}">
+                <TabControl ItemsSource="{Binding LeftPanels}">
+                    <TabControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:PanelSlotViewModel">
+                            <TextBlock Text="{Binding DisplayName}" />
+                        </DataTemplate>
+                    </TabControl.ItemTemplate>
+                    <TabControl.ContentTemplate>
+                        <DataTemplate x:DataType="vm:PanelSlotViewModel">
+                            <ContentControl Content="{Binding Content}" />
+                        </DataTemplate>
+                    </TabControl.ContentTemplate>
+                </TabControl>
             </Border>
 
-            <GridSplitter Grid.Column="1" Width="4" ResizeDirection="Columns" />
+            <GridSplitter Grid.Column="1" Width="4" ResizeDirection="Columns" IsVisible="{Binding HasLeftPanels}" />
 
-            <!-- DOCUMENT AREA: one tab per executed search, plus a collapsible bottom panel -->
+            <!-- DOCUMENT AREA: one tab per executed search, plus a collapsible bottom zone. -->
             <Grid Grid.Column="2" RowDefinitions="*,Auto,Auto">
                 <TabControl Grid.Row="0"
                             ItemsSource="{Binding SearchTabs}"
@@ -54,109 +82,47 @@
                     </TabControl.ContentTemplate>
                 </TabControl>
 
-                <GridSplitter Grid.Row="1" Height="4" ResizeDirection="Rows" IsVisible="{Binding IsBottomPanelVisible}" />
+                <GridSplitter Grid.Row="1" Height="4" ResizeDirection="Rows" IsVisible="{Binding HasBottomPanels}" />
 
-                <!-- JOBS / ERRORS (#14): live per-job rows with cancel buttons; a failed job's
-                     error stays on its own row after later jobs run, instead of being overwritten
-                     by a single shared status line. -->
+                <!-- BOTTOM ZONE (Jobs/Errors by default, hidden until toggled - #14). -->
                 <Border Grid.Row="2" Classes="Panel" BorderThickness="0,1,0,0" Height="180"
-                        IsVisible="{Binding IsBottomPanelVisible}">
-                    <DockPanel Margin="10">
-                        <TextBlock DockPanel.Dock="Top" Classes="PanelHeader" Text="JOBS / ERRORS" Margin="0,0,0,8" />
-                        <TextBlock DockPanel.Dock="Top" Classes="FieldLabel" Text="No background jobs yet."
-                                   IsVisible="{Binding !Jobs.HasJobs}" />
-                        <ScrollViewer>
-                            <ItemsControl ItemsSource="{Binding Jobs.Jobs}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate x:DataType="vm:JobRowViewModel">
-                                        <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,6">
-                                            <StackPanel Grid.Column="0">
-                                                <StackPanel Orientation="Horizontal" Spacing="6">
-                                                    <TextBlock Text="{Binding KindDisplay}" FontWeight="Bold" />
-                                                    <TextBlock Text="{Binding Title}" />
-                                                    <TextBlock Text="{Binding StateDisplay}" Classes="FieldLabel" />
-                                                </StackPanel>
-                                                <TextBlock Classes="FieldLabel" Text="{Binding StatusMessage}"
-                                                           IsVisible="{Binding HasStatusMessage}" />
-                                                <TextBlock Foreground="{StaticResource StatusError}" TextWrapping="Wrap"
-                                                           Text="{Binding Error}" IsVisible="{Binding HasError}" />
-                                            </StackPanel>
-                                            <Button Grid.Column="1" Classes="Danger" Content="Cancel" VerticalAlignment="Top"
-                                                    IsVisible="{Binding IsCancellable}"
-                                                    Command="{Binding #Root.((vm:MainWindowViewModel)DataContext).Jobs.CancelCommand}"
-                                                    CommandParameter="{Binding}" />
-                                        </Grid>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                        </ScrollViewer>
-                    </DockPanel>
+                        IsVisible="{Binding HasBottomPanels}">
+                    <TabControl ItemsSource="{Binding BottomPanels}">
+                        <TabControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:PanelSlotViewModel">
+                                <TextBlock Text="{Binding DisplayName}" />
+                            </DataTemplate>
+                        </TabControl.ItemTemplate>
+                        <TabControl.ContentTemplate>
+                            <DataTemplate x:DataType="vm:PanelSlotViewModel">
+                                <ContentControl Content="{Binding Content}" />
+                            </DataTemplate>
+                        </TabControl.ContentTemplate>
+                    </TabControl>
                 </Border>
             </Grid>
 
-            <GridSplitter Grid.Column="3" Width="4" ResizeDirection="Columns" />
+            <GridSplitter Grid.Column="3" Width="4" ResizeDirection="Columns" IsVisible="{Binding HasRightPanels}" />
 
-            <!-- INSPECTOR (#15): phone-level timeline (aligned vs estimated) and the
-                 query-to-match correspondence for the selected result. Waveform rendering is
-                 explicitly out of scope - see the issue's own "stretch goal" note. -->
-            <Border Grid.Column="4" Classes="Panel" BorderThickness="1,0,0,0">
-                <DockPanel Margin="10">
-                    <TextBlock DockPanel.Dock="Top" Classes="PanelHeader" Text="INSPECTOR" Margin="0,0,0,8" />
-                    <TextBlock DockPanel.Dock="Top" Classes="FieldLabel" TextWrapping="Wrap"
-                               Text="Select a result to inspect it."
-                               IsVisible="{Binding !Inspector.HasSelection}" />
-                    <ScrollViewer IsVisible="{Binding Inspector.HasSelection}">
-                        <StackPanel Spacing="10">
-                            <TextBlock Text="{Binding Inspector.SourceTextDisplay}" TextWrapping="Wrap"
-                                       Foreground="{StaticResource TextPrimary}" />
-                            <TextBlock Classes="FieldLabel" Text="{Binding Inspector.AlignmentSummary}" TextWrapping="Wrap" />
-
-                            <StackPanel>
-                                <TextBlock Classes="HeaderLabel" Text="PHONE TIMELINE" Margin="0,0,0,4" />
-                                <ItemsControl ItemsSource="{Binding Inspector.PhoneBlocks}">
-                                    <ItemsControl.ItemsPanel>
-                                        <ItemsPanelTemplate>
-                                            <WrapPanel Orientation="Horizontal" />
-                                        </ItemsPanelTemplate>
-                                    </ItemsControl.ItemsPanel>
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate x:DataType="vm:PhoneBlockViewModel">
-                                            <Button Classes.Aligned="{Binding IsAligned}" Classes.Estimated="{Binding !IsAligned}"
-                                                    Classes="PhoneBlock" Width="{Binding Width}" Content="{Binding Symbol}"
-                                                    ToolTip.Tip="{Binding TimingTooltip}" IsEnabled="{Binding HasTiming}"
-                                                    Command="{Binding #Root.((vm:MainWindowViewModel)DataContext).Inspector.SeekCommand}"
-                                                    CommandParameter="{Binding}" />
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                                <TextBlock Classes="FieldLabel" Text="{Binding Inspector.SeekStatus}" TextWrapping="Wrap" Margin="0,4,0,0" />
-                            </StackPanel>
-
-                            <StackPanel IsVisible="{Binding Inspector.HasAlignmentSteps}">
-                                <TextBlock Classes="HeaderLabel" Text="QUERY CORRESPONDENCE" Margin="0,0,0,4" />
-                                <ItemsControl ItemsSource="{Binding Inspector.AlignmentSteps}">
-                                    <ItemsControl.ItemsPanel>
-                                        <ItemsPanelTemplate>
-                                            <WrapPanel Orientation="Horizontal" />
-                                        </ItemsPanelTemplate>
-                                    </ItemsControl.ItemsPanel>
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate x:DataType="vm:AlignmentStepDisplayViewModel">
-                                            <Border Classes="AlignmentChip" Classes.Problem="{Binding IsProblem}">
-                                                <TextBlock Text="{Binding Display}" />
-                                            </Border>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                            </StackPanel>
-                        </StackPanel>
-                    </ScrollViewer>
-                </DockPanel>
+            <!-- RIGHT ZONE (Inspector by default; Settings shares this zone as a second tab - #19). -->
+            <Border Grid.Column="4" Classes="Panel" BorderThickness="1,0,0,0" IsVisible="{Binding HasRightPanels}">
+                <TabControl ItemsSource="{Binding RightPanels}">
+                    <TabControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:PanelSlotViewModel">
+                            <TextBlock Text="{Binding DisplayName}" />
+                        </DataTemplate>
+                    </TabControl.ItemTemplate>
+                    <TabControl.ContentTemplate>
+                        <DataTemplate x:DataType="vm:PanelSlotViewModel">
+                            <ContentControl Content="{Binding Content}" />
+                        </DataTemplate>
+                    </TabControl.ContentTemplate>
+                </TabControl>
             </Border>
         </Grid>
 
         <!-- ══ STATUS BAR ══ -->
-        <DockPanel Grid.Row="2" Classes="StatusBar">
+        <DockPanel Grid.Row="3" Classes="StatusBar">
             <TextBlock Classes="FieldLabel" Margin="10,0" VerticalAlignment="Center"
                        Text="{Binding Library.Items.Count, StringFormat='{}{0} media in library'}" />
             <TextBlock Classes="FieldLabel" Margin="0,0,10,0" VerticalAlignment="Center"

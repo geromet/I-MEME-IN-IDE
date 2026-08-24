@@ -1,17 +1,21 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using MemeSearcher.Shell;
 
 namespace MemeSearcher.ViewModels;
 
 /// <summary>
-/// Shell hosting the top-level panels (handoff §43, Milestone 12's IDE shell). Library and Settings
-/// stay single instances - Library is a persistent left panel now rather than a tab, and Settings
-/// opens as its own window (#19 will make it a registered Tool instead). Search is the one panel
-/// that needs multiple simultaneous instances: each executed search is its own document/tab, so two
-/// queries can be compared side by side without one overwriting the other's results.
+/// Shell hosting the top-level panels (handoff §43, Milestone 12's IDE shell; #19 replaced the
+/// hardcoded Library/Inspector/Jobs/Settings panels with registered <see cref="IViewPanel"/>s in
+/// fixed dock zones - this is the one mechanism, not a framework plus special cases). Search is the
+/// one panel that needs multiple simultaneous instances: each executed search is its own
+/// document/tab, so two queries can be compared side by side without one overwriting the other's
+/// results.
 /// </summary>
 public partial class MainWindowViewModel : ViewModelBase
 {
@@ -19,11 +23,28 @@ public partial class MainWindowViewModel : ViewModelBase
 
     public LibraryViewModel Library { get; }
 
-    public SettingsViewModel Settings { get; }
-
     public JobsPanelViewModel Jobs { get; }
 
     public InspectorViewModel Inspector { get; }
+
+    /// <summary>Every registered panel, in registration order - what the View menu lists.</summary>
+    public IReadOnlyList<PanelSlotViewModel> Panels { get; }
+
+    public ObservableCollection<PanelSlotViewModel> LeftPanels { get; } = [];
+
+    public ObservableCollection<PanelSlotViewModel> RightPanels { get; } = [];
+
+    public ObservableCollection<PanelSlotViewModel> BottomPanels { get; } = [];
+
+    /// <summary>A zone's chrome (border, splitter) is only shown while it has at least one visible panel - hiding a zone's last panel collapses the space rather than leaving an empty pane.</summary>
+    [ObservableProperty]
+    private bool _hasLeftPanels;
+
+    [ObservableProperty]
+    private bool _hasRightPanels;
+
+    [ObservableProperty]
+    private bool _hasBottomPanels;
 
     public ObservableCollection<SearchViewModel> SearchTabs { get; } = [];
 
@@ -33,22 +54,36 @@ public partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty]
     private SearchViewModel? _activeSearchTab;
 
-    /// <summary>
-    /// Whether the bottom Jobs/Errors panel (Milestone 14) is shown - collapsible so the layout
-    /// doesn't waste vertical space on it when there's nothing to show.
-    /// </summary>
-    [ObservableProperty]
-    private bool _isBottomPanelVisible;
-
     public MainWindowViewModel(
-        Func<SearchViewModel> searchViewModelFactory, LibraryViewModel library, SettingsViewModel settings,
-        JobsPanelViewModel jobs, InspectorViewModel inspector)
+        Func<SearchViewModel> searchViewModelFactory, LibraryViewModel library,
+        JobsPanelViewModel jobs, InspectorViewModel inspector, IEnumerable<IViewPanel> panels, Core.Settings.ISettingsStore settingsStore)
     {
         _searchViewModelFactory = searchViewModelFactory;
         Library = library;
-        Settings = settings;
         Jobs = jobs;
         Inspector = inspector;
+
+        Panels = panels.Select(p => new PanelSlotViewModel(p, settingsStore)).ToArray();
+        foreach (var slot in Panels)
+        {
+            var zone = ZoneFor(slot.Dock);
+            zone.Add(slot);
+            slot.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName == nameof(PanelSlotViewModel.IsVisible))
+                {
+                    RefreshZoneMembership(slot, zone);
+                }
+            };
+            if (!slot.IsVisible)
+            {
+                zone.Remove(slot);
+            }
+        }
+
+        WireZoneCount(LeftPanels, v => HasLeftPanels = v);
+        WireZoneCount(RightPanels, v => HasRightPanels = v);
+        WireZoneCount(BottomPanels, v => HasBottomPanels = v);
 
         // Milestone 13: an open search tab's scope indicator must reflect a checkbox toggled in
         // the (always-visible) library panel *before* the next search runs, not only after -
@@ -59,6 +94,33 @@ public partial class MainWindowViewModel : ViewModelBase
         Library.PropertyChanged += OnLibrarySelectionChanged;
 
         NewSearchTab();
+    }
+
+    private static void WireZoneCount(ObservableCollection<PanelSlotViewModel> zone, Action<bool> setHasPanels)
+    {
+        zone.CollectionChanged += (_, _) => setHasPanels(zone.Count > 0);
+        setHasPanels(zone.Count > 0);
+    }
+
+    private ObservableCollection<PanelSlotViewModel> ZoneFor(DockZone zone) => zone switch
+    {
+        DockZone.Left => LeftPanels,
+        DockZone.Right => RightPanels,
+        DockZone.Bottom => BottomPanels,
+        _ => throw new ArgumentOutOfRangeException(nameof(zone)),
+    };
+
+    /// <summary>A zone's TabControl only shows visible panels - a hidden one drops out of the collection entirely rather than rendering an empty/disabled tab.</summary>
+    private void RefreshZoneMembership(PanelSlotViewModel slot, ObservableCollection<PanelSlotViewModel> zone)
+    {
+        if (slot.IsVisible && !zone.Contains(slot))
+        {
+            zone.Add(slot);
+        }
+        else if (!slot.IsVisible)
+        {
+            zone.Remove(slot);
+        }
     }
 
     private void OnLibrarySelectionChanged(object? sender, PropertyChangedEventArgs e)
@@ -139,5 +201,8 @@ public partial class MainWindowViewModel : ViewModelBase
     }
 
     [RelayCommand]
-    private void ToggleBottomPanel() => IsBottomPanelVisible = !IsBottomPanelVisible;
+    private void TogglePanel(PanelSlotViewModel slot) => slot.IsVisible = !slot.IsVisible;
+
+    [RelayCommand]
+    private void ToggleJobsPanel() => TogglePanel(Panels.First(p => p.Id == PanelIds.Jobs));
 }

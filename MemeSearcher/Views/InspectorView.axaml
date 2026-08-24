@@ -1,0 +1,66 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:MemeSearcher.ViewModels"
+             mc:Ignorable="d" d:DesignWidth="280" d:DesignHeight="550"
+             x:Class="MemeSearcher.Views.InspectorView"
+             x:DataType="vm:InspectorViewModel"
+             x:Name="Root">
+    <!-- #15: phone-level timeline (aligned vs estimated) and the query-to-match correspondence for
+         the selected result. Waveform rendering is explicitly out of scope - see the issue's own
+         "stretch goal" note. Extracted into its own UserControl by #19 so it can be registered as a
+         panel instead of living inline in the shell. -->
+    <DockPanel Margin="10">
+        <TextBlock DockPanel.Dock="Top" Classes="PanelHeader" Text="INSPECTOR" Margin="0,0,0,8" />
+        <TextBlock DockPanel.Dock="Top" Classes="FieldLabel" TextWrapping="Wrap"
+                   Text="Select a result to inspect it."
+                   IsVisible="{Binding !HasSelection}" />
+        <ScrollViewer IsVisible="{Binding HasSelection}">
+            <StackPanel Spacing="10">
+                <TextBlock Text="{Binding SourceTextDisplay}" TextWrapping="Wrap"
+                           Foreground="{StaticResource TextPrimary}" />
+                <TextBlock Classes="FieldLabel" Text="{Binding AlignmentSummary}" TextWrapping="Wrap" />
+
+                <StackPanel>
+                    <TextBlock Classes="HeaderLabel" Text="PHONE TIMELINE" Margin="0,0,0,4" />
+                    <ItemsControl ItemsSource="{Binding PhoneBlocks}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel Orientation="Horizontal" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:PhoneBlockViewModel">
+                                <Button Classes.Aligned="{Binding IsAligned}" Classes.Estimated="{Binding !IsAligned}"
+                                        Classes="PhoneBlock" Width="{Binding Width}" Content="{Binding Symbol}"
+                                        ToolTip.Tip="{Binding TimingTooltip}" IsEnabled="{Binding HasTiming}"
+                                        Command="{Binding #Root.((vm:InspectorViewModel)DataContext).SeekCommand}"
+                                        CommandParameter="{Binding}" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <TextBlock Classes="FieldLabel" Text="{Binding SeekStatus}" TextWrapping="Wrap" Margin="0,4,0,0" />
+                </StackPanel>
+
+                <StackPanel IsVisible="{Binding HasAlignmentSteps}">
+                    <TextBlock Classes="HeaderLabel" Text="QUERY CORRESPONDENCE" Margin="0,0,0,4" />
+                    <ItemsControl ItemsSource="{Binding AlignmentSteps}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel Orientation="Horizontal" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:AlignmentStepDisplayViewModel">
+                                <Border Classes="AlignmentChip" Classes.Problem="{Binding IsProblem}">
+                                    <TextBlock Text="{Binding Display}" />
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </StackPanel>
+        </ScrollViewer>
+    </DockPanel>
+</UserControl>

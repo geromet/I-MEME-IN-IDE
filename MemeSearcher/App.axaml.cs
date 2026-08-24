@@ -16,6 +16,7 @@ using MemeSearcher.Infrastructure.Search;
 using MemeSearcher.Infrastructure.Settings;
 using MemeSearcher.Infrastructure.Transcription;
 using MemeSearcher.Services;
+using MemeSearcher.Shell;
 using MemeSearcher.ViewModels;
 using MemeSearcher.Views;
 using Microsoft.EntityFrameworkCore;
@@ -132,10 +133,26 @@ public partial class App : Application
         // a delegate keeps it from depending on IServiceProvider directly (which would make it a
         // service locator and hard to unit-test without a full container).
         services.AddSingleton<Func<SearchViewModel>>(sp => sp.GetRequiredService<SearchViewModel>);
-        services.AddTransient<LibraryViewModel>();
-        services.AddTransient<SettingsViewModel>();
-        services.AddTransient<JobsPanelViewModel>();
-        services.AddTransient<InspectorViewModel>();
+
+        // #19: Library/Inspector/Jobs/Settings are now registered as IViewPanel, resolved as
+        // IEnumerable<IViewPanel> the same way ISettingsCategory is above - a new panel is one
+        // AddSingleton pair, no shell XAML edit. They must be singletons: the shell wraps each one
+        // in a PanelSlotViewModel that subscribes to it, and a second instance (e.g. under
+        // AddTransient) would mean a second, independent subscription - JobsPanelViewModel in
+        // particular subscribes to IJobQueue.Changed in its constructor and would double its rows.
+        services.AddSingleton<LibraryViewModel>();
+        services.AddSingleton<SettingsViewModel>();
+        services.AddSingleton<JobsPanelViewModel>();
+        services.AddSingleton<InspectorViewModel>();
+        services.AddSingleton<IViewPanel>(sp => new ViewPanelDescriptor(
+            PanelIds.Library, "Library", DockZone.Left, sp.GetRequiredService<LibraryViewModel>()));
+        services.AddSingleton<IViewPanel>(sp => new ViewPanelDescriptor(
+            PanelIds.Inspector, "Inspector", DockZone.Right, sp.GetRequiredService<InspectorViewModel>()));
+        services.AddSingleton<IViewPanel>(sp => new ViewPanelDescriptor(
+            PanelIds.Jobs, "Jobs / Errors", DockZone.Bottom, sp.GetRequiredService<JobsPanelViewModel>(), visibleByDefault: false));
+        services.AddSingleton<IViewPanel>(sp => new ViewPanelDescriptor(
+            PanelIds.Settings, "Settings", DockZone.Right, sp.GetRequiredService<SettingsViewModel>(), visibleByDefault: false));
+
         services.AddTransient<MainWindowViewModel>();
         services.AddTransient<MainWindow>();
 

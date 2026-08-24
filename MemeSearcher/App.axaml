@@ -1,7 +1,14 @@
 <Application xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:shell="using:MemeSearcher.Shell"
              x:Class="MemeSearcher.App"
              RequestedThemeVariant="Dark">
+
+    <!-- #19: resolves any panel's View by naming convention, so registering a new panel never
+         requires a hand-written DataTemplate anywhere, shell included. -->
+    <Application.DataTemplates>
+        <shell:ViewLocator />
+    </Application.DataTemplates>
 
     <Application.Styles>
         <FluentTheme />

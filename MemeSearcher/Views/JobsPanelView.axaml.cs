@@ -2,9 +2,9 @@ using Avalonia.Controls;
 
 namespace MemeSearcher.Views;
 
-public partial class SettingsWindow : Window
+public partial class JobsPanelView : UserControl
 {
-    public SettingsWindow()
+    public JobsPanelView()
     {
         InitializeComponent();
     }

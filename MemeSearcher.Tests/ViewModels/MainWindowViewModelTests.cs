@@ -8,6 +8,7 @@ using MemeSearcher.Infrastructure.Search;
 using MemeSearcher.Infrastructure.Transcription;
 using MemeSearcher.Tests.TestDoubles;
 using MemeSearcher.Core.Settings;
+using MemeSearcher.Shell;
 using MemeSearcher.ViewModels;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -66,7 +67,15 @@ public class MainWindowViewModelTests : IDisposable
         var jobsPanelViewModel = new JobsPanelViewModel(jobQueue);
         var inspectorViewModel = new InspectorViewModel(new FakeMediaPlayerLauncher());
 
-        var viewModel = new MainWindowViewModel(SearchViewModelFactory, libraryViewModel, settingsViewModel, jobsPanelViewModel, inspectorViewModel);
+        IViewPanel[] panels =
+        [
+            new ViewPanelDescriptor(PanelIds.Library, "Library", DockZone.Left, libraryViewModel),
+            new ViewPanelDescriptor(PanelIds.Inspector, "Inspector", DockZone.Right, inspectorViewModel),
+            new ViewPanelDescriptor(PanelIds.Jobs, "Jobs / Errors", DockZone.Bottom, jobsPanelViewModel, visibleByDefault: false),
+            new ViewPanelDescriptor(PanelIds.Settings, "Settings", DockZone.Right, settingsViewModel, visibleByDefault: false),
+        ];
+
+        var viewModel = new MainWindowViewModel(SearchViewModelFactory, libraryViewModel, jobsPanelViewModel, inspectorViewModel, panels, settingsStore);
 
         return (viewModel, dbContextFactory, phonemizer);
     }
@@ -241,6 +250,63 @@ public class MainWindowViewModelTests : IDisposable
 
         Assert.Same(firstTab, Assert.Single(viewModel.SearchTabs));
         Assert.Same(firstTab, viewModel.ActiveSearchTab);
+    }
+
+    /// <summary>
+    /// #19 exit criterion: layout (open/closed) persists, and a zone's chrome disappears entirely
+    /// once nothing in it is visible rather than showing an empty pane.
+    /// </summary>
+    [Fact]
+    public async Task JobsPanel_StartsHiddenByDefault_AndTogglingItMovesItInAndOutOfTheBottomZone()
+    {
+        var setup = await TrySetUpAsync();
+        if (setup is null)
+        {
+            return;
+        }
+
+        var (viewModel, _, _) = setup.Value;
+
+        Assert.False(viewModel.HasBottomPanels);
+        Assert.Empty(viewModel.BottomPanels);
+
+        viewModel.ToggleJobsPanelCommand.Execute(null);
+
+        Assert.True(viewModel.HasBottomPanels);
+        var jobsSlot = Assert.Single(viewModel.BottomPanels);
+        Assert.Equal("Jobs / Errors", jobsSlot.DisplayName);
+
+        viewModel.ToggleJobsPanelCommand.Execute(null);
+
+        Assert.False(viewModel.HasBottomPanels);
+        Assert.Empty(viewModel.BottomPanels);
+    }
+
+    /// <summary>The View menu binds directly to PanelSlotViewModel.IsVisible - toggling it (as the menu's checkbox would) must move the panel between zones exactly like the dedicated Jobs toolbar toggle does.</summary>
+    [Fact]
+    public async Task TogglingAPanelSlotsIsVisible_MovesItInAndOutOfItsZone()
+    {
+        var setup = await TrySetUpAsync();
+        if (setup is null)
+        {
+            return;
+        }
+
+        var (viewModel, _, _) = setup.Value;
+
+        Assert.True(viewModel.HasRightPanels);
+        var inspectorSlot = Assert.Single(viewModel.RightPanels);
+        Assert.Equal("Inspector", inspectorSlot.DisplayName);
+
+        inspectorSlot.IsVisible = false;
+
+        Assert.False(viewModel.HasRightPanels);
+        Assert.Empty(viewModel.RightPanels);
+
+        inspectorSlot.IsVisible = true;
+
+        Assert.True(viewModel.HasRightPanels);
+        Assert.Same(inspectorSlot, Assert.Single(viewModel.RightPanels));
     }
 
     public void Dispose()
