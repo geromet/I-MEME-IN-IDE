@@ -15,6 +15,8 @@
             <TextBox Text="{Binding NewTemplateName}" PlaceholderText="Template name" Width="160" />
             <TextBox Text="{Binding NewTemplateDescription}" PlaceholderText="Description (optional)" Width="220" />
             <Button Content="Create" Command="{Binding CreateCommand}" />
+            <Button Content="Import..." Command="{Binding ImportCommand}" ToolTip.Tip="Import template(s) from a JSON file." />
+            <Button Content="Load Starter Templates" Command="{Binding LoadStarterTemplatesCommand}" ToolTip.Tip="A small shipped set demonstrating sounds text search can't express." />
         </StackPanel>
 
         <Border Grid.Row="2"
@@ -56,6 +58,11 @@
                                         <Button Content="Rename"
                                                 Margin="0,0,6,6"
                                                 Command="{Binding #Root.((vm:TemplatesViewModel)DataContext).BeginRenameCommand}"
+                                                CommandParameter="{Binding}"
+                                                IsVisible="{Binding !IsPendingDelete}" />
+                                        <Button Content="Export..."
+                                                Margin="0,0,6,6"
+                                                Command="{Binding #Root.((vm:TemplatesViewModel)DataContext).ExportCommand}"
                                                 CommandParameter="{Binding}"
                                                 IsVisible="{Binding !IsPendingDelete}" />
                                         <Button Content="Delete"

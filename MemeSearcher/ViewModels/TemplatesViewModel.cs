@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -30,6 +31,7 @@ public record CatalogOption(Guid? Id, string Name);
 public partial class TemplatesViewModel(
     TemplateService templateService,
     TemplateSearchService templateSearchService,
+    TemplateImportExportService templateImportExportService,
     CatalogService catalogService,
     LibraryService libraryService,
     IMediaPlayerLauncher playerLauncher,
@@ -375,6 +377,69 @@ public partial class TemplatesViewModel(
         catch (Exception ex)
         {
             SetError($"Search failed: {ex.Message}");
+        }
+    }
+
+    /// <summary>Export as a plain JSON file (#21) - a target catalog is deliberately left out of the file (TemplateExportFile's own doc comment explains why), so nothing here needs to ask about that.</summary>
+    [RelayCommand]
+    private async Task ExportAsync(TemplateRowViewModel template)
+    {
+        var suggestedFileName = $"{string.Join('_', template.Name.Split(Path.GetInvalidFileNameChars()))}.json";
+        var path = await filePicker.PickTemplateExportPathAsync(suggestedFileName);
+        if (path is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var json = await templateImportExportService.ExportAsync(template.Id);
+            await File.WriteAllTextAsync(path, json);
+            StatusMessage = $"Exported \"{template.Name}\" to {path}.";
+        }
+        catch (Exception ex)
+        {
+            SetError($"Export failed: {ex.Message}");
+        }
+    }
+
+    /// <summary>#21's shipped starter set, loaded through the same import path a shared file would use - always creates new templates, so clicking it twice just gives you two copies (same as any other import).</summary>
+    [RelayCommand]
+    private async Task LoadStarterTemplatesAsync()
+    {
+        try
+        {
+            var newIds = await templateImportExportService.ImportAsync(StarterTemplates.BuildExportJson());
+            await LoadAsync();
+            StatusMessage = $"Loaded {newIds.Count} starter template(s).";
+        }
+        catch (Exception ex)
+        {
+            SetError($"Failed to load starter templates: {ex.Message}");
+        }
+    }
+
+    [RelayCommand]
+    private async Task ImportAsync()
+    {
+        var path = await filePicker.PickTemplateImportPathAsync();
+        if (path is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var json = await File.ReadAllTextAsync(path);
+            var newIds = await templateImportExportService.ImportAsync(json);
+            await LoadAsync();
+            StatusMessage = newIds.Count == 1
+                ? "Imported 1 template."
+                : $"Imported {newIds.Count} templates.";
+        }
+        catch (Exception ex)
+        {
+            SetError($"Import failed: {ex.Message}");
         }
     }
 }

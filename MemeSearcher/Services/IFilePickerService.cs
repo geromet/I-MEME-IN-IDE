@@ -20,4 +20,10 @@ public interface IFilePickerService
 
     /// <summary>Milestone 5: where to save an extracted clip. Returns null if the user cancelled.</summary>
     Task<string?> PickClipExportPathAsync(string suggestedFileName);
+
+    /// <summary>Milestone 18 (#21): where to save exported template(s) as a plain JSON file. Returns null if the user cancelled.</summary>
+    Task<string?> PickTemplateExportPathAsync(string suggestedFileName);
+
+    /// <summary>Milestone 18 (#21): the JSON file to import template(s) from. Returns null if the user cancelled.</summary>
+    Task<string?> PickTemplateImportPathAsync();
 }

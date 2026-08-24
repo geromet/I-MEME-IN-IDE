@@ -33,6 +33,10 @@ public class LibraryViewModelTests : IDisposable
         public Task<IReadOnlyList<string>> PickMediaFilesAsync() => Task.FromResult(paths);
 
         public Task<string?> PickClipExportPathAsync(string suggestedFileName) => Task.FromResult<string?>(null);
+
+        public Task<string?> PickTemplateExportPathAsync(string suggestedFileName) => Task.FromResult<string?>(null);
+
+        public Task<string?> PickTemplateImportPathAsync() => Task.FromResult<string?>(null);
     }
 
     private async Task<(LibraryViewModel ViewModel, IJobQueue JobQueue)?> TrySetUpAsync(params IReadOnlyList<string> pickedFilePaths)

@@ -26,6 +26,10 @@ public class CatalogsViewModelTests : IDisposable
         public Task<IReadOnlyList<string>> PickMediaFilesAsync() => Task.FromResult<IReadOnlyList<string>>([]);
 
         public Task<string?> PickClipExportPathAsync(string suggestedFileName) => Task.FromResult<string?>(null);
+
+        public Task<string?> PickTemplateExportPathAsync(string suggestedFileName) => Task.FromResult<string?>(null);
+
+        public Task<string?> PickTemplateImportPathAsync() => Task.FromResult<string?>(null);
     }
 
     private async Task<CatalogsViewModel?> TrySetUpAsync()

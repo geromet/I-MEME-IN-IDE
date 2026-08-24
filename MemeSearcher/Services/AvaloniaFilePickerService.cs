@@ -54,4 +54,40 @@ public class AvaloniaFilePickerService : IFilePickerService
 
         return file?.TryGetLocalPath();
     }
+
+    public async Task<string?> PickTemplateExportPathAsync(string suggestedFileName)
+    {
+        var window = (Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.MainWindow;
+        if (window is null)
+        {
+            return null;
+        }
+
+        var file = await window.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        {
+            Title = "Export template(s)",
+            SuggestedFileName = suggestedFileName,
+            FileTypeChoices = [new FilePickerFileType("Template file") { Patterns = ["*.json"] }],
+        });
+
+        return file?.TryGetLocalPath();
+    }
+
+    public async Task<string?> PickTemplateImportPathAsync()
+    {
+        var window = (Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.MainWindow;
+        if (window is null)
+        {
+            return null;
+        }
+
+        var files = await window.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = "Import template(s)",
+            AllowMultiple = false,
+            FileTypeFilter = [new FilePickerFileType("Template file") { Patterns = ["*.json"] }],
+        });
+
+        return files.Count == 0 ? null : files[0].TryGetLocalPath();
+    }
 }

@@ -15,4 +15,15 @@ public class FakeFilePickerService : IFilePickerService
         LastSuggestedFileName = suggestedFileName;
         return Task.FromResult(ClipExportPathToReturn);
     }
+
+    public string? TemplateExportPathToReturn { get; set; }
+    public string? TemplateImportPathToReturn { get; set; }
+
+    public Task<string?> PickTemplateExportPathAsync(string suggestedFileName)
+    {
+        LastSuggestedFileName = suggestedFileName;
+        return Task.FromResult(TemplateExportPathToReturn);
+    }
+
+    public Task<string?> PickTemplateImportPathAsync() => Task.FromResult(TemplateImportPathToReturn);
 }

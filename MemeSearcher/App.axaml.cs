@@ -128,6 +128,7 @@ public partial class App : Application
         services.AddScoped<CatalogService>();
         services.AddScoped<TemplateService>();
         services.AddScoped<TemplateSearchService>();
+        services.AddScoped<TemplateImportExportService>();
 
         services.AddSingleton<IFilePickerService, AvaloniaFilePickerService>();
         services.AddSingleton<IClipboardService, AvaloniaClipboardService>();
