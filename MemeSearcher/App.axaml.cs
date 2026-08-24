@@ -133,6 +133,7 @@ public partial class App : Application
         services.AddScoped<YtDlpPlaylistEnumerationService>();
         services.AddScoped<YtDlpImportPlanner>();
         services.AddScoped<YtDlpDownloadProvider>();
+        services.AddScoped<YtDlpImportOrchestrator>();
 
         services.AddSingleton<IToolRegistry>(sp => new ToolRegistry(
             [.. sp.GetKeyedServices<IExternalToolLocator>(KeyedService.AnyKey)]));

@@ -1,3 +1,4 @@
+using MemeSearcher.Core.Models;
 using MemeSearcher.Infrastructure.YtDlp;
 
 namespace MemeSearcher.Tests.YtDlp;
@@ -24,7 +25,7 @@ public class YtDlpDownloadProviderTests : IDisposable
     {
         File.WriteAllText(Path.Combine(EnsureDir(), "jNQXAC9IVRw.mp3"), "fake audio content");
 
-        var result = YtDlpDownloadProvider.ParseResult(RealPrintJsonOutput, _dir);
+        var result = YtDlpDownloadProvider.ParseResult(RealPrintJsonOutput, _dir, YtDlpMediaKind.Audio);
 
         Assert.Equal("jNQXAC9IVRw", result.VideoId);
         Assert.Equal("Me at the zoo", result.Title);
@@ -40,7 +41,7 @@ public class YtDlpDownloadProviderTests : IDisposable
         // "ext"/"_filename".
         File.WriteAllText(Path.Combine(EnsureDir(), "jNQXAC9IVRw.mp3"), "fake audio content");
 
-        var result = YtDlpDownloadProvider.ParseResult(RealPrintJsonOutput, _dir);
+        var result = YtDlpDownloadProvider.ParseResult(RealPrintJsonOutput, _dir, YtDlpMediaKind.Audio);
 
         Assert.EndsWith("jNQXAC9IVRw.mp3", result.FilePath);
     }
@@ -50,7 +51,7 @@ public class YtDlpDownloadProviderTests : IDisposable
     {
         EnsureDir();
 
-        Assert.Throws<InvalidOperationException>(() => YtDlpDownloadProvider.ParseResult(RealPrintJsonOutput, _dir));
+        Assert.Throws<InvalidOperationException>(() => YtDlpDownloadProvider.ParseResult(RealPrintJsonOutput, _dir, YtDlpMediaKind.Audio));
     }
 
     [Fact]
@@ -59,7 +60,7 @@ public class YtDlpDownloadProviderTests : IDisposable
         File.WriteAllText(Path.Combine(EnsureDir(), "abc123.mp3"), "fake audio content");
         var stdout = """{"id": "abc123", "title": "Some video", "uploader": "Some Uploader"}""";
 
-        var result = YtDlpDownloadProvider.ParseResult(stdout, _dir);
+        var result = YtDlpDownloadProvider.ParseResult(stdout, _dir, YtDlpMediaKind.Audio);
 
         Assert.Equal("Some Uploader", result.Channel);
     }

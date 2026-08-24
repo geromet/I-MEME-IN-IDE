@@ -42,7 +42,8 @@ public class YtDlpDownloadProvider(
         startInfo.ArgumentList.Add(Path.Combine(downloadDir, "%(id)s.%(ext)s"));
         startInfo.ArgumentList.Add("--print-json");
 
-        if (settings.ResolveMediaKind(settingsStore) == Core.Models.YtDlpMediaKind.Audio)
+        var mediaKind = settings.ResolveMediaKind(settingsStore);
+        if (mediaKind == Core.Models.YtDlpMediaKind.Audio)
         {
             startInfo.ArgumentList.Add("-x");
             startInfo.ArgumentList.Add("--audio-format");
@@ -73,7 +74,7 @@ public class YtDlpDownloadProvider(
             throw new InvalidOperationException($"yt-dlp exited with code {process.ExitCode}: {lastLine}");
         }
 
-        return ParseResult(stdout, downloadDir);
+        return ParseResult(stdout, downloadDir, mediaKind);
     }
 
     /// <summary>
@@ -83,7 +84,7 @@ public class YtDlpDownloadProvider(
     /// since postprocessing (audio extraction, video+audio merge) changes the extension in ways that
     /// differ across yt-dlp versions and this glob is correct regardless of which one ran.
     /// </summary>
-    public static YtDlpDownloadResult ParseResult(string stdout, string downloadDir)
+    public static YtDlpDownloadResult ParseResult(string stdout, string downloadDir, Core.Models.YtDlpMediaKind mediaKind)
     {
         var lastLine = stdout.Split('\n').LastOrDefault(l => l.Trim().Length > 0)
             ?? throw new InvalidOperationException("yt-dlp produced no JSON output.");
@@ -103,7 +104,7 @@ public class YtDlpDownloadProvider(
             ?? throw new InvalidOperationException(
                 $"yt-dlp reported success but no output file '{id}.*' was found in '{downloadDir}'.");
 
-        return new YtDlpDownloadResult(filePath, id, title, channel, uploadDate);
+        return new YtDlpDownloadResult(filePath, id, title, channel, uploadDate, mediaKind);
     }
 
     private static string? GetOptionalString(JsonElement root, string propertyName) =>

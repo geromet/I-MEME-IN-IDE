@@ -7,4 +7,5 @@ public enum JobKind
     Import,
     Realign,
     Reindex,
+    YtDlpImport,
 }
