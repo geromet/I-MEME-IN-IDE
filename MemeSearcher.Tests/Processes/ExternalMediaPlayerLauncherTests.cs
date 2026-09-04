@@ -4,11 +4,8 @@ using MemeSearcher.Infrastructure.Processes;
 namespace MemeSearcher.Tests.Processes;
 
 /// <summary>
-/// Exercises the real process-launch boundary (mpv, confirmed installed on this machine) rather
-/// than mocking it - the risk here is entirely "does the CLI invocation actually work," which a
-/// mock can't catch. Doesn't assert anything about actual playback (mpv is given a non-media file
-/// so it exits quickly on its own) - only that OpenAsync correctly finds a seek-capable player and
-/// launches it without throwing.
+/// Exercises the real process-launch boundary where practical and verifies command construction
+/// directly where launching a desktop handler would be environment-specific.
 /// </summary>
 public class ExternalMediaPlayerLauncherTests
 {
@@ -47,6 +44,37 @@ public class ExternalMediaPlayerLauncherTests
         {
             File.Delete(tempFile);
         }
+    }
+
+    [Theory]
+    [InlineData(false, true, "open")]
+    [InlineData(false, false, "xdg-open")]
+    public void BuildDefaultApplicationStartInfo_NonWindowsPreservesSpacedPathAsOneArgument(
+        bool isWindows,
+        bool isMacOS,
+        string expectedExecutable)
+    {
+        const string path = "/tmp/meme corpus/clip one.mp4";
+
+        var startInfo = ExternalMediaPlayerLauncher.BuildDefaultApplicationStartInfo(path, isWindows, isMacOS);
+
+        Assert.Equal(expectedExecutable, startInfo.FileName);
+        Assert.False(startInfo.UseShellExecute);
+        Assert.Single(startInfo.ArgumentList);
+        Assert.Equal(path, startInfo.ArgumentList[0]);
+        Assert.Empty(startInfo.Arguments);
+    }
+
+    [Fact]
+    public void BuildDefaultApplicationStartInfo_WindowsKeepsRegisteredHandlerBehavior()
+    {
+        const string path = @"C:\meme corpus\clip one.mp4";
+
+        var startInfo = ExternalMediaPlayerLauncher.BuildDefaultApplicationStartInfo(path, isWindows: true, isMacOS: false);
+
+        Assert.Equal(path, startInfo.FileName);
+        Assert.True(startInfo.UseShellExecute);
+        Assert.Empty(startInfo.ArgumentList);
     }
 
     private static async Task<bool> IsAvailableAsync(string executable)
