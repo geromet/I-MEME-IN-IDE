@@ -22,9 +22,7 @@
         <StackPanel Grid.Row="2" Margin="0,12,0,0" Spacing="6">
             <StackPanel Orientation="Horizontal" Spacing="8">
                 <TextBlock Text="External tool status" FontSize="16" FontWeight="Bold" Foreground="{StaticResource TextPrimary}" VerticalAlignment="Center" />
-                <Button Content="Refresh"
-                        Command="{Binding RefreshToolStatusesCommand}"
-                        IsEnabled="{Binding !IsRefreshingToolStatuses}" />
+                <Button Content="Check tools" Command="{Binding RefreshToolStatusesCommand}" />
             </StackPanel>
 
             <TextBlock Text="{Binding ToolStatusError}"
