@@ -20,6 +20,8 @@ public class YtDlpDownloadProvider(
     YtDlpSettings settings,
     ISettingsStore settingsStore)
 {
+    private const string FinalPathPrefix = "MEMESEARCHER_FINAL_PATH=";
+
     public async Task<YtDlpDownloadResult> DownloadAsync(string videoUrl, CancellationToken cancellationToken = default)
     {
         var status = await toolLocator.LocateAsync(cancellationToken);
@@ -41,6 +43,8 @@ public class YtDlpDownloadProvider(
         startInfo.ArgumentList.Add("-o");
         startInfo.ArgumentList.Add(Path.Combine(downloadDir, "%(id)s.%(ext)s"));
         startInfo.ArgumentList.Add("--print-json");
+        startInfo.ArgumentList.Add("--print");
+        startInfo.ArgumentList.Add($"after_move:{FinalPathPrefix}%(filepath)s");
 
         var mediaKind = settings.ResolveMediaKind(settingsStore);
         if (mediaKind == Core.Models.YtDlpMediaKind.Audio)
@@ -74,22 +78,31 @@ public class YtDlpDownloadProvider(
             throw new InvalidOperationException($"yt-dlp exited with code {process.ExitCode}: {lastLine}");
         }
 
-        return ParseResult(stdout, downloadDir, mediaKind);
+        return ParseResult(stdout, mediaKind);
     }
 
     /// <summary>
-    /// Public and static for the same reason as YtDlpPlaylistEnumerationService.ParseEntries: testable
-    /// against captured real --print-json output with no live download involved. The final file path
-    /// is resolved by globbing "<id>.*" in the download directory rather than trusting a JSON field,
-    /// since postprocessing (audio extraction, video+audio merge) changes the extension in ways that
-    /// differ across yt-dlp versions and this glob is correct regardless of which one ran.
+    /// Parses the metadata JSON plus yt-dlp's explicit after-move filepath. yt-dlp documents
+    /// <c>--print after_move:filepath</c> as the reliable way to obtain the final filename after
+    /// extraction, merging, and other post-processing. This avoids guessing from the pre-processing
+    /// JSON extension or scanning the download directory, where stale files for the same video id
+    /// can coexist.
     /// </summary>
-    public static YtDlpDownloadResult ParseResult(string stdout, string downloadDir, Core.Models.YtDlpMediaKind mediaKind)
+    public static YtDlpDownloadResult ParseResult(string stdout, Core.Models.YtDlpMediaKind mediaKind)
     {
-        var lastLine = stdout.Split('\n').LastOrDefault(l => l.Trim().Length > 0)
+        var lines = stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var jsonLine = lines.FirstOrDefault(line => line.StartsWith('{'))
             ?? throw new InvalidOperationException("yt-dlp produced no JSON output.");
+        var finalPath = lines
+            .LastOrDefault(line => line.StartsWith(FinalPathPrefix, StringComparison.Ordinal))?
+            [FinalPathPrefix.Length..];
 
-        using var document = JsonDocument.Parse(lastLine);
+        if (string.IsNullOrWhiteSpace(finalPath))
+        {
+            throw new InvalidOperationException("yt-dlp reported success but did not report its final output path.");
+        }
+
+        using var document = JsonDocument.Parse(jsonLine);
         var root = document.RootElement;
 
         var id = root.GetProperty("id").GetString()
@@ -100,11 +113,13 @@ public class YtDlpDownloadProvider(
             ? DateOnly.ParseExact(raw, "yyyyMMdd")
             : (DateOnly?)null;
 
-        var filePath = Directory.EnumerateFiles(downloadDir, $"{id}.*").FirstOrDefault()
-            ?? throw new InvalidOperationException(
-                $"yt-dlp reported success but no output file '{id}.*' was found in '{downloadDir}'.");
+        if (!File.Exists(finalPath))
+        {
+            throw new InvalidOperationException(
+                $"yt-dlp reported success but its final output file '{finalPath}' does not exist.");
+        }
 
-        return new YtDlpDownloadResult(filePath, id, title, channel, uploadDate, mediaKind);
+        return new YtDlpDownloadResult(finalPath, id, title, channel, uploadDate, mediaKind);
     }
 
     private static string? GetOptionalString(JsonElement root, string propertyName) =>
