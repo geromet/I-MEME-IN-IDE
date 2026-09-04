@@ -64,15 +64,16 @@ public class ExternalMediaPlayerLauncher : IMediaPlayerLauncher
     {
         if (OperatingSystem.IsWindows())
         {
+            // Windows delegates files to their registered application through shell execution.
             Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
+            return;
         }
-        else if (OperatingSystem.IsMacOS())
+
+        var startInfo = new ProcessStartInfo(OperatingSystem.IsMacOS() ? "open" : "xdg-open")
         {
-            Process.Start("open", path);
-        }
-        else
-        {
-            Process.Start("xdg-open", path);
-        }
+            UseShellExecute = false,
+        };
+        startInfo.ArgumentList.Add(path);
+        Process.Start(startInfo);
     }
 }
