@@ -62,17 +62,25 @@ public class ExternalMediaPlayerLauncher : IMediaPlayerLauncher
 
     private static void OpenWithDefaultApplication(string path)
     {
-        if (OperatingSystem.IsWindows())
+        Process.Start(BuildDefaultApplicationStartInfo(
+            path,
+            OperatingSystem.IsWindows(),
+            OperatingSystem.IsMacOS()));
+    }
+
+    internal static ProcessStartInfo BuildDefaultApplicationStartInfo(string path, bool isWindows, bool isMacOS)
+    {
+        if (isWindows)
         {
-            Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
+            // Windows delegates files to their registered application through shell execution.
+            return new ProcessStartInfo(path) { UseShellExecute = true };
         }
-        else if (OperatingSystem.IsMacOS())
+
+        var startInfo = new ProcessStartInfo(isMacOS ? "open" : "xdg-open")
         {
-            Process.Start("open", path);
-        }
-        else
-        {
-            Process.Start("xdg-open", path);
-        }
+            UseShellExecute = false,
+        };
+        startInfo.ArgumentList.Add(path);
+        return startInfo;
     }
 }
