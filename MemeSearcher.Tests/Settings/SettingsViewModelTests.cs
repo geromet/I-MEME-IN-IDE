@@ -109,4 +109,66 @@ public class SettingsViewModelTests
         Assert.Equal("Installed (2026.08.19)", status.Summary);
         Assert.DoesNotContain("recommended", status.Details, StringComparison.OrdinalIgnoreCase);
     }
+
+    [Fact]
+    public void Constructor_DoesNotProbeToolsWhileTheSettingsPanelIsHidden()
+    {
+        var store = new InMemorySettingsStore();
+        var settingsRegistry = new SettingsRegistry([new WhisperXSettings(new CudaAvailabilityProbe())]);
+        var locator = new RecordingToolLocator(
+            "yt-dlp",
+            new ExternalToolStatus(true, "/usr/bin/yt-dlp", "2026.08.19", null));
+        var toolRegistry = new ToolRegistry([locator]);
+
+        _ = new SettingsViewModel(settingsRegistry, store, toolRegistry);
+
+        Assert.Equal(0, locator.CallCount);
+    }
+
+    [Fact]
+    public async Task RefreshToolStatusesAsync_UsesTheSharedRegistryAndKeepsActionableFailures()
+    {
+        var store = new InMemorySettingsStore();
+        var settingsRegistry = new SettingsRegistry([new WhisperXSettings(new CudaAvailabilityProbe())]);
+        var ytDlp = new RecordingToolLocator(
+            "yt-dlp",
+            new ExternalToolStatus(true, "/usr/bin/yt-dlp", "2026.08.19", null));
+        var ffmpeg = new RecordingToolLocator(
+            "ffmpeg",
+            new ExternalToolStatus(false, null, null, "Install FFmpeg and configure its path."));
+        var toolRegistry = new ToolRegistry([ytDlp, ffmpeg]);
+        var viewModel = new SettingsViewModel(settingsRegistry, store, toolRegistry);
+
+        await viewModel.RefreshToolStatusesAsync();
+
+        Assert.Equal(1, ytDlp.CallCount);
+        Assert.Equal(1, ffmpeg.CallCount);
+        Assert.Collection(
+            viewModel.ToolStatuses,
+            yt =>
+            {
+                Assert.Equal("yt-dlp", yt.Name);
+                Assert.StartsWith("Installed", yt.Summary);
+            },
+            ff =>
+            {
+                Assert.Equal("ffmpeg", ff.Name);
+                Assert.Equal("Not installed", ff.Summary);
+                Assert.Contains("Install FFmpeg", ff.Details);
+            });
+        Assert.False(viewModel.HasToolStatusError);
+    }
+
+    private sealed class RecordingToolLocator(string toolName, ExternalToolStatus status) : IExternalToolLocator
+    {
+        public string ToolName => toolName;
+
+        public int CallCount { get; private set; }
+
+        public Task<ExternalToolStatus> LocateAsync(CancellationToken cancellationToken = default)
+        {
+            CallCount++;
+            return Task.FromResult(status);
+        }
+    }
 }
