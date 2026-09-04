@@ -93,9 +93,11 @@ public class YtDlpDownloadProvider(
         var lines = stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         var jsonLine = lines.FirstOrDefault(line => line.StartsWith('{'))
             ?? throw new InvalidOperationException("yt-dlp produced no JSON output.");
-        var finalPath = lines
-            .LastOrDefault(line => line.StartsWith(FinalPathPrefix, StringComparison.Ordinal))?
-            [FinalPathPrefix.Length..];
+        var finalPathLine = lines.LastOrDefault(line =>
+            line.StartsWith(FinalPathPrefix, StringComparison.Ordinal));
+        var finalPath = finalPathLine is null
+            ? null
+            : finalPathLine[FinalPathPrefix.Length..];
 
         if (string.IsNullOrWhiteSpace(finalPath))
         {
