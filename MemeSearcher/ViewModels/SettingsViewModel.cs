@@ -92,14 +92,6 @@ public partial class SettingsViewModel : ViewModelBase
         // when the next transcription fails.
         store.Changed += (_, _) => Revalidate();
         Revalidate();
-
-        // The shell creates this singleton during startup. Probe once so status is already useful
-        // when Settings is first opened; a manual Refresh joins this in-flight work instead of
-        // launching duplicate version processes.
-        if (_toolRegistry is not null)
-        {
-            _ = RefreshToolStatusesAsync();
-        }
     }
 
     public ObservableCollection<SettingsCategoryViewModel> Categories { get; }
@@ -139,9 +131,12 @@ public partial class SettingsViewModel : ViewModelBase
             var today = DateOnly.FromDateTime(DateTime.UtcNow);
 
             ToolStatuses.Clear();
-            foreach (var (name, status) in statuses.OrderBy(pair => pair.Key, StringComparer.OrdinalIgnoreCase))
+            foreach (var locator in _toolRegistry.Locators)
             {
-                ToolStatuses.Add(ExternalToolStatusViewModel.Create(name, status, today));
+                if (statuses.TryGetValue(locator.ToolName, out var status))
+                {
+                    ToolStatuses.Add(ExternalToolStatusViewModel.Create(locator.ToolName, status, today));
+                }
             }
         }
         catch (Exception ex)
