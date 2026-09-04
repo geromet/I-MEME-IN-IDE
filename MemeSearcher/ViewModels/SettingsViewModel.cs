@@ -118,7 +118,13 @@ public partial class SettingsViewModel : ViewModelBase
             return Task.CompletedTask;
         }
 
-        return _toolStatusRefreshTask ??= RefreshToolStatusesCoreAsync();
+        if (_toolStatusRefreshTask is { IsCompleted: false })
+        {
+            return _toolStatusRefreshTask;
+        }
+
+        _toolStatusRefreshTask = RefreshToolStatusesCoreAsync();
+        return _toolStatusRefreshTask;
     }
 
     private async Task RefreshToolStatusesCoreAsync()
@@ -146,7 +152,6 @@ public partial class SettingsViewModel : ViewModelBase
         finally
         {
             IsRefreshingToolStatuses = false;
-            _toolStatusRefreshTask = null;
         }
     }
 
