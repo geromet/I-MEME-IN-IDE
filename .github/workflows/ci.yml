@@ -30,7 +30,7 @@ jobs:
       - name: Install test tool dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install --yes espeak-ng ffmpeg
+          sudo apt-get install --yes espeak-ng ffmpeg yt-dlp
 
       - name: Restore
         run: dotnet restore MemeSearcher.sln
