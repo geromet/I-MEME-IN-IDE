@@ -1,3 +1,4 @@
+using MemeSearcher.Core.Search;
 using MemeSearcher.Infrastructure.Database;
 using Microsoft.EntityFrameworkCore;
 
@@ -69,6 +70,25 @@ public class LibraryService(IDbContextFactory<MemeSearcherDbContext> dbContextFa
 
         var ids = await context.Media.Select(m => new { m.Id, m.IsSelectedForSearch }).ToListAsync(cancellationToken);
         return (ids.Where(m => m.IsSelectedForSearch).Select(m => m.Id).ToList(), ids.Count);
+    }
+
+    /// <summary>
+    /// #43: resolves temporary metadata facets as an intersection with the persistent corpus
+    /// selection. This deliberately does not update <c>IsSelectedForSearch</c>; clearing facets
+    /// therefore restores the user's saved source selection immediately.
+    /// </summary>
+    public async Task<(IReadOnlyList<Guid> SelectedIds, int Total)> GetSelectionSummaryAsync(
+        MediaSearchFacets facets,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(facets);
+
+        await using var context = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+        var media = await context.Media.ToListAsync(cancellationToken);
+
+        return (
+            media.Where(m => m.IsSelectedForSearch && facets.Matches(m)).Select(m => m.Id).ToList(),
+            media.Count);
     }
 
     /// <summary>
