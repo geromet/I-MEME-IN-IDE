@@ -7,7 +7,7 @@
              mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="550"
              x:Class="MemeSearcher.Views.SettingsView"
              x:DataType="vm:SettingsViewModel">
-    <Grid Margin="16" RowDefinitions="Auto,Auto,*">
+    <Grid Margin="16" RowDefinitions="Auto,Auto,Auto,*">
         <TextBlock Grid.Row="0" Text="Settings" FontSize="20" FontWeight="Bold" Foreground="{StaticResource TextPrimary}" />
 
         <Border Grid.Row="1"
@@ -19,7 +19,33 @@
             <TextBlock Text="{Binding ValidationMessage}" TextWrapping="Wrap" Foreground="{StaticResource TextPrimary}" />
         </Border>
 
-        <ScrollViewer Grid.Row="2" Margin="0,12,0,0">
+        <StackPanel Grid.Row="2" Margin="0,12,0,0" Spacing="6">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <TextBlock Text="External tool status" FontSize="16" FontWeight="Bold" Foreground="{StaticResource TextPrimary}" VerticalAlignment="Center" />
+                <Button Content="Refresh"
+                        Command="{Binding RefreshToolStatusesCommand}"
+                        IsEnabled="{Binding !IsRefreshingToolStatuses}" />
+            </StackPanel>
+
+            <TextBlock Text="{Binding ToolStatusError}"
+                       IsVisible="{Binding HasToolStatusError}"
+                       TextWrapping="Wrap"
+                       Foreground="{StaticResource TextPrimary}" />
+
+            <ItemsControl ItemsSource="{Binding ToolStatuses}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:ExternalToolStatusViewModel">
+                        <Grid ColumnDefinitions="130,220,*" Margin="0,2,0,2">
+                            <TextBlock Grid.Column="0" Text="{Binding Name}" FontWeight="SemiBold" Foreground="{StaticResource TextPrimary}" />
+                            <TextBlock Grid.Column="1" Text="{Binding Summary}" TextWrapping="Wrap" />
+                            <TextBlock Grid.Column="2" Text="{Binding Details}" Classes="FieldLabel" TextWrapping="Wrap" />
+                        </Grid>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </StackPanel>
+
+        <ScrollViewer Grid.Row="3" Margin="0,12,0,0">
             <ItemsControl ItemsSource="{Binding Categories}">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="vm:SettingsCategoryViewModel">
