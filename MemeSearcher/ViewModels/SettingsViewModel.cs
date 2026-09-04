@@ -91,14 +91,6 @@ public partial class SettingsViewModel : ViewModelBase
         // when the next transcription fails.
         store.Changed += (_, _) => Revalidate();
         Revalidate();
-
-        // SettingsViewModel is a shell singleton. When the real app supplies #16's registry, probe
-        // once up front so missing/stale tools are visible when Settings is first opened. Unit tests
-        // and design-time callers may omit the registry and retain the old zero-I/O constructor.
-        if (_toolRegistry is not null)
-        {
-            _ = RefreshToolStatusesAsync();
-        }
     }
 
     public ObservableCollection<SettingsCategoryViewModel> Categories { get; }
@@ -127,9 +119,12 @@ public partial class SettingsViewModel : ViewModelBase
             var today = DateOnly.FromDateTime(DateTime.UtcNow);
 
             ToolStatuses.Clear();
-            foreach (var (name, status) in statuses.OrderBy(pair => pair.Key, StringComparer.OrdinalIgnoreCase))
+            foreach (var locator in _toolRegistry.Locators)
             {
-                ToolStatuses.Add(ExternalToolStatusViewModel.Create(name, status, today));
+                if (statuses.TryGetValue(locator.ToolName, out var status))
+                {
+                    ToolStatuses.Add(ExternalToolStatusViewModel.Create(locator.ToolName, status, today));
+                }
             }
         }
         catch (Exception ex)
