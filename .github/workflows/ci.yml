@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Install test tool dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes espeak-ng ffmpeg
+
+      - name: Restore
+        run: dotnet restore MemeSearcher.sln
+
+      - name: Build
+        run: dotnet build MemeSearcher.sln --configuration Release --no-restore
+
+      - name: Test
+        run: dotnet test MemeSearcher.Tests/MemeSearcher.Tests.csproj --configuration Release --no-build
