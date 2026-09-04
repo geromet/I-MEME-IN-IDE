@@ -64,6 +64,7 @@ public partial class SettingsViewModel : ViewModelBase
     private readonly SettingsRegistry _registry;
     private readonly ISettingsStore _store;
     private readonly IToolRegistry? _toolRegistry;
+    private Task? _toolStatusRefreshTask;
 
     [ObservableProperty]
     private string _validationMessage = "";
@@ -91,6 +92,14 @@ public partial class SettingsViewModel : ViewModelBase
         // when the next transcription fails.
         store.Changed += (_, _) => Revalidate();
         Revalidate();
+
+        // The shell creates this singleton during startup. Probe once so status is already useful
+        // when Settings is first opened; a manual Refresh joins this in-flight work instead of
+        // launching duplicate version processes.
+        if (_toolRegistry is not null)
+        {
+            _ = RefreshToolStatusesAsync();
+        }
     }
 
     public ObservableCollection<SettingsCategoryViewModel> Categories { get; }
@@ -102,29 +111,31 @@ public partial class SettingsViewModel : ViewModelBase
     public bool HasToolStatusError => ToolStatusError.Length > 0;
 
     [RelayCommand]
-    public async Task RefreshToolStatusesAsync()
+    public Task RefreshToolStatusesAsync()
     {
-        if (_toolRegistry is null || IsRefreshingToolStatuses)
+        if (_toolRegistry is null)
         {
-            return;
+            return Task.CompletedTask;
         }
 
+        return _toolStatusRefreshTask ??= RefreshToolStatusesCoreAsync();
+    }
+
+    private async Task RefreshToolStatusesCoreAsync()
+    {
         IsRefreshingToolStatuses = true;
         ToolStatusError = "";
         OnPropertyChanged(nameof(HasToolStatusError));
 
         try
         {
-            var statuses = await _toolRegistry.LocateAllAsync();
+            var statuses = await _toolRegistry!.LocateAllAsync();
             var today = DateOnly.FromDateTime(DateTime.UtcNow);
 
             ToolStatuses.Clear();
-            foreach (var locator in _toolRegistry.Locators)
+            foreach (var (name, status) in statuses.OrderBy(pair => pair.Key, StringComparer.OrdinalIgnoreCase))
             {
-                if (statuses.TryGetValue(locator.ToolName, out var status))
-                {
-                    ToolStatuses.Add(ExternalToolStatusViewModel.Create(locator.ToolName, status, today));
-                }
+                ToolStatuses.Add(ExternalToolStatusViewModel.Create(name, status, today));
             }
         }
         catch (Exception ex)
@@ -135,6 +146,7 @@ public partial class SettingsViewModel : ViewModelBase
         finally
         {
             IsRefreshingToolStatuses = false;
+            _toolStatusRefreshTask = null;
         }
     }
 
