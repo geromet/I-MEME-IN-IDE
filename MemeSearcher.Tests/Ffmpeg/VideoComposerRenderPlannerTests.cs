@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using MemeSearcher.Infrastructure.Ffmpeg;
+using MemeSearcher.Infrastructure.Processes;
 
 namespace MemeSearcher.Tests.Ffmpeg;
 
