@@ -82,7 +82,7 @@ public class InspectorWaveformViewModelTests
     private static SearchResultRowViewModel MakeRow(string? mediaPath, double start, double end)
     {
         var result = new SearchResult(
-            Guid.NewGuid(), start, end, "hello", "hɛloʊ", ["h"], ["h"], 0.9,
+            Guid.NewGuid(), start, end, "hello", "hɛloʊ", ["h"], 0.9, ["h"],
             [new MatchedPhone("h", start, end, true)], [], 0, 1);
 
         return new SearchResultRowViewModel(
