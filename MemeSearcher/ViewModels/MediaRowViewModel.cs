@@ -35,9 +35,38 @@ public partial class MediaRowViewModel(MediaSummary summary) : ObservableObject
         ? summary.Duration.ToString(@"hh\:mm\:ss")
         : "";
 
+    // #34: four distinct pipeline stages. Coverage is factual none/partial/full rather than an
+    // arbitrary threshold: one missing word remains visible instead of being presented as "done".
+    public string TranscriptStateDisplay { get; } = summary.HasTranscript
+        ? "Transcript: ready"
+        : "Transcript: none";
+
+    public string PhonemeStateDisplay { get; } = CoverageDisplay(
+        "Phonemes", summary.PhonemizedWordCount, summary.WordCount);
+
+    public string AlignmentStateDisplay { get; } = CoverageDisplay(
+        "Alignment", summary.AlignedWordCount, summary.WordCount);
+
+    public string IndexStateDisplay { get; } = summary.HasIndexPostings
+        ? "Index: ready"
+        : "Index: none";
+
+    // Retained for compact compatibility with any other view/test still consuming the older label.
     public string PhonemeCoverageDisplay { get; } = summary.WordCount > 0
         ? $"{summary.PhonemizedWordCount}/{summary.WordCount} phonemized"
         : "no words";
+
+    private static string CoverageDisplay(string stage, int completed, int total)
+    {
+        if (total <= 0 || completed <= 0)
+        {
+            return $"{stage}: none";
+        }
+
+        var clamped = Math.Min(completed, total);
+        var state = clamped == total ? "full" : "partial";
+        return $"{stage}: {state} ({clamped}/{total})";
+    }
 
     // Two-step confirmation for the destructive delete-source-file action (addendum §29): the
     // first click arms it, a second click on the same row actually deletes.
