@@ -89,7 +89,8 @@ public class YtDlpImportOrchestratorTests : IDisposable
                 new DateOnly(2024, 1, 2), YtDlpMediaKind.Audio));
 
         var messages = new List<string>();
-        var summary = await orchestrator.ImportAsync(plan, "en-US", Download, new Progress<string>(messages.Add));
+        var summary = await orchestrator.ImportAsync(
+            plan, "en-US", Download, new SynchronousProgress<string>(messages.Add));
 
         Assert.Equal(1, summary.Imported);
         Assert.Equal(0, summary.Failed);
@@ -99,6 +100,40 @@ public class YtDlpImportOrchestratorTests : IDisposable
         Assert.Equal("Some Channel", media.Channel);
         Assert.Equal(new DateOnly(2024, 1, 2), media.UploadDate);
         Assert.Equal(YtDlpMediaKind.Audio, media.YtDlpMediaKind);
+        Assert.Contains(messages, m => m.Contains("Done: 1 imported, 0 failed"));
+    }
+
+    [Fact]
+    public async Task ImportAsync_AwaitingCompletionDoesNotDrainQueuedProgressObserver()
+    {
+        var phonemizer = await CreatePhonemizerIfAvailableAsync();
+        if (phonemizer is null)
+        {
+            return;
+        }
+
+        await using var context = CreateContext();
+        var orchestrator = CreateOrchestrator(context, phonemizer);
+
+        var entry = new YtDlpVideoEntry("vid-queued", "Queued Progress", null, "https://www.youtube.com/watch?v=vid-queued");
+        var plan = PlanOf(entry);
+
+        Task<YtDlpDownloadResult> Download(string url, CancellationToken ct) =>
+            Task.FromResult(new YtDlpDownloadResult(
+                WriteFakeMediaFile("vid-queued.mp3"), "vid-queued", "Queued Progress", null,
+                new DateOnly(2024, 2, 3), YtDlpMediaKind.Audio));
+
+        var messages = new List<string>();
+        var progress = new QueuedProgress<string>(messages.Add);
+
+        var summary = await orchestrator.ImportAsync(plan, "en-US", Download, progress);
+
+        Assert.Equal(1, summary.Imported);
+        Assert.True(progress.PendingCount > 0);
+        Assert.DoesNotContain(messages, m => m.Contains("Done: 1 imported, 0 failed"));
+
+        progress.Drain();
+
         Assert.Contains(messages, m => m.Contains("Done: 1 imported, 0 failed"));
     }
 
@@ -225,5 +260,27 @@ public class YtDlpImportOrchestratorTests : IDisposable
             File.Delete(_dbPath);
         }
         Directory.Delete(_tempDir, recursive: true);
+    }
+
+    private sealed class SynchronousProgress<T>(Action<T> handler) : IProgress<T>
+    {
+        public void Report(T value) => handler(value);
+    }
+
+    private sealed class QueuedProgress<T>(Action<T> handler) : IProgress<T>
+    {
+        private readonly Queue<T> _pending = new();
+
+        public int PendingCount => _pending.Count;
+
+        public void Report(T value) => _pending.Enqueue(value);
+
+        public void Drain()
+        {
+            while (_pending.TryDequeue(out var value))
+            {
+                handler(value);
+            }
+        }
     }
 }
