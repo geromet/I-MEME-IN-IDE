@@ -6,7 +6,7 @@ namespace MemeSearcher.ViewModels;
 /// <summary>
 /// Presentation-only projection for one composite result component in the shared Inspector (#35).
 /// It reuses the component row's existing media/provenance fields and the same PhoneBlockViewModel
-/// primitive as single-result inspection; no second alignment/provenance model is introduced.
+/// primitive as single-result inspection; waveform state is temporary presentation data only.
 /// </summary>
 public sealed class CompositeInspectorComponentViewModel
 {
@@ -15,6 +15,8 @@ public sealed class CompositeInspectorComponentViewModel
         OrdinalDisplay = $"COMPONENT {ordinal}";
         MediaTitle = component.MediaTitle;
         MediaPath = component.MediaPath;
+        StartSeconds = component.StartSeconds;
+        EndSeconds = component.EndSeconds;
         SourceText = component.SourceText;
         ScoreDisplay = component.ScoreDisplay;
         TimeRangeDisplay = component.TimeRangeDisplay;
@@ -35,12 +37,15 @@ public sealed class CompositeInspectorComponentViewModel
     public string OrdinalDisplay { get; }
     public string MediaTitle { get; }
     public string? MediaPath { get; }
+    public double? StartSeconds { get; }
+    public double? EndSeconds { get; }
     public string SourceText { get; }
     public string ScoreDisplay { get; }
     public string TimeRangeDisplay { get; }
     public string QueryCoverageDisplay { get; }
     public string AlignmentSummary { get; }
     public IReadOnlyList<CompositeInspectorPhoneViewModel> Phones { get; }
+    public WaveformStripViewModel Waveform { get; } = new();
 }
 
 public sealed class CompositeInspectorPhoneViewModel(PhoneBlockViewModel block, string? mediaPath, string mediaTitle)
