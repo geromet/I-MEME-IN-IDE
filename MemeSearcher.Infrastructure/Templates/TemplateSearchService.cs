@@ -1,5 +1,6 @@
 using System.Text.Json;
 using MemeSearcher.Core.Interfaces;
+using MemeSearcher.Core.Models;
 using MemeSearcher.Core.Search;
 using MemeSearcher.Infrastructure.Catalogs;
 using MemeSearcher.Infrastructure.Database;
