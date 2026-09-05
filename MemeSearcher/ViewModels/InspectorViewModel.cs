@@ -8,6 +8,7 @@ using CommunityToolkit.Mvvm.Input;
 using MemeSearcher.Core.Interfaces;
 using MemeSearcher.Core.Search;
 using MemeSearcher.Infrastructure.Ffmpeg;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace MemeSearcher.ViewModels;
 
@@ -29,8 +30,10 @@ public partial class InspectorViewModel : ViewModelBase
     {
     }
 
-    public InspectorViewModel(IMediaPlayerLauncher playerLauncher, WaveformSampler waveformSampler)
-        : this(playerLauncher, waveformSampler.SampleAsync)
+    public InspectorViewModel(
+        IMediaPlayerLauncher playerLauncher,
+        [FromKeyedServices("ffmpeg")] IExternalToolLocator ffmpegLocator)
+        : this(playerLauncher, new WaveformSampler(ffmpegLocator).SampleAsync)
     {
     }
 
