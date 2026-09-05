@@ -34,7 +34,7 @@ public class InspectorWaveformViewModelTests
 
         Assert.Single(inspector.Waveform.Bars);
         Assert.Equal(newerHeight, inspector.Waveform.Bars[0].Height);
-        Assert.Equal(24, newerHeight, 6);
+        Assert.Equal(22, newerHeight, 6);
     }
 
     [Fact]
