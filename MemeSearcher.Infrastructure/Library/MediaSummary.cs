@@ -1,11 +1,10 @@
 namespace MemeSearcher.Infrastructure.Library;
 
 /// <summary>
-/// Processing-status projection for the Library view (addendum §27: "every media item should
-/// expose processing state"). Deliberately doesn't claim stages the current pipeline doesn't
-/// have yet (no separate Video/Alignment/Index columns - addendum §27's mockup - since import is
-/// currently one atomic step that always phonemizes); it reports what's actually knowable from
-/// the data today rather than faking granularity.
+/// Factual processing-state projection for the Library view (#34 / addendum §27-28).
+/// Counts stay separate from presentation so the UI can distinguish none/partial/full without
+/// inventing a threshold. Index state deliberately means "has persisted n-gram postings" - the
+/// concrete per-media fact available in the current schema.
 /// </summary>
 public record MediaSummary(
     Guid Id,
@@ -15,7 +14,10 @@ public record MediaSummary(
     TimeSpan Duration,
     string Language,
     DateTimeOffset CreatedAt,
+    bool HasTranscript,
     int SegmentCount,
     int WordCount,
     int PhonemizedWordCount,
+    int AlignedWordCount,
+    bool HasIndexPostings,
     bool IsSelectedForSearch);
