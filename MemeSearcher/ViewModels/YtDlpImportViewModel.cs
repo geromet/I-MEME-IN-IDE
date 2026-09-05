@@ -148,12 +148,18 @@ public partial class YtDlpImportViewModel : ViewModelBase
         }
         catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
         {
-            StatusMessage = "Review cancelled. No download was started.";
+            if (ReferenceEquals(_reviewCancellation, cancellation))
+            {
+                StatusMessage = "Review cancelled. No download was started.";
+            }
         }
         catch (Exception ex)
         {
-            ReviewError = $"Could not review this URL: {ex.Message}";
-            StatusMessage = "Review failed. No download was started.";
+            if (ReferenceEquals(_reviewCancellation, cancellation))
+            {
+                ReviewError = $"Could not review this URL: {ex.Message}";
+                StatusMessage = "Review failed. No download was started.";
+            }
         }
         finally
         {
