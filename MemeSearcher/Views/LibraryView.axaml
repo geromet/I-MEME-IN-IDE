@@ -56,10 +56,18 @@
                             <WrapPanel>
                                 <TextBlock Classes="HeaderLabel" Margin="0,0,8,2" Text="{Binding Language}" />
                                 <TextBlock Classes="HeaderLabel" Margin="0,0,8,2" Text="{Binding SegmentsDisplay}" />
-                                <TextBlock Classes="HeaderLabel" Margin="0,0,8,2" Text="{Binding PhonemeCoverageDisplay}" />
                                 <TextBlock Classes="HeaderLabel" Margin="0,0,8,2" Text="{Binding PlayableMediaDisplay}" />
                                 <TextBlock Classes="HeaderLabel" Margin="0,0,8,2" Text="{Binding DurationDisplay}" />
                                 <TextBlock Classes="HeaderLabel" Margin="0,0,8,2" Text="{Binding ImportedAtDisplay}" />
+                            </WrapPanel>
+
+                            <!-- #34 / addendum §27-28: separate factual stages; partial coverage
+                                 stays visible instead of being flattened into one coarse badge. -->
+                            <WrapPanel>
+                                <TextBlock Classes="FieldLabel" Margin="0,0,12,2" Text="{Binding TranscriptStateDisplay}" />
+                                <TextBlock Classes="FieldLabel" Margin="0,0,12,2" Text="{Binding PhonemeStateDisplay}" />
+                                <TextBlock Classes="FieldLabel" Margin="0,0,12,2" Text="{Binding AlignmentStateDisplay}" />
+                                <TextBlock Classes="FieldLabel" Margin="0,0,12,2" Text="{Binding IndexStateDisplay}" />
                             </WrapPanel>
 
                             <WrapPanel Margin="0,4,0,0">
