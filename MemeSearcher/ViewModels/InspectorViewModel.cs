@@ -157,7 +157,7 @@ public partial class InspectorViewModel(IMediaPlayerLauncher playerLauncher) : V
                     : "Estimated timing - no phone-level alignment has run for this source.";
     }
 
-    private static string FormatSeekOutcome(MediaPlayerLaunchResult outcome, string symbol, double start, string? mediaTitle) => outcome switch
+    private static string FormatSeekOutcome(MediaLaunchResult outcome, string symbol, double start, string? mediaTitle) => outcome switch
     {
         { Success: true, SeekedToTimestamp: true } when mediaTitle is not null => $"Seeked {mediaTitle} to \"{symbol}\" at {FormatTimestamp(start)}.",
         { Success: true, SeekedToTimestamp: true } => $"Seeked to \"{symbol}\" at {FormatTimestamp(start)}.",
