@@ -3,11 +3,12 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:vm="using:MemeSearcher.ViewModels"
-             mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="550"
+             xmlns:yt="using:MemeSearcher.Infrastructure.YtDlp"
+             mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="650"
              x:Class="MemeSearcher.Views.LibraryView"
              x:DataType="vm:LibraryViewModel"
              x:Name="Root">
-    <Grid Margin="12" RowDefinitions="Auto,Auto,Auto,Auto,*">
+    <Grid Margin="12" RowDefinitions="Auto,Auto,Auto,Auto,Auto,*">
         <TextBlock Grid.Row="0" Classes="PanelHeader" Text="LIBRARY" Margin="0,0,0,8" />
 
         <WrapPanel Grid.Row="1" Margin="0,0,0,4">
@@ -15,8 +16,82 @@
             <Button Content="Add Media..." Command="{Binding ImportCommand}" Margin="0,0,6,6" />
         </WrapPanel>
 
+        <!-- #27: enumeration/review is intentionally separate from confirmation. The Review
+             command can invoke yt-dlp only in flat-playlist metadata mode; no download path is
+             reachable until Confirm Import queues the existing JobKind.YtDlpImport work item. -->
+        <Border Grid.Row="2"
+                Margin="0,0,0,10"
+                Padding="10"
+                BorderThickness="1"
+                BorderBrush="{StaticResource BorderMid}"
+                CornerRadius="4">
+            <StackPanel Spacing="6">
+                <TextBlock Classes="HeaderLabel" Text="YOUTUBE / PLAYLIST IMPORT" />
+                <Grid ColumnDefinitions="*,Auto,Auto">
+                    <TextBox Grid.Column="0"
+                             Text="{Binding YtDlpImport.SourceUrl}"
+                             Watermark="Channel or playlist URL"
+                             Margin="0,0,6,0" />
+                    <Button Grid.Column="1"
+                            Content="Review..."
+                            Command="{Binding YtDlpImport.ReviewCommand}"
+                            IsEnabled="{Binding !YtDlpImport.IsPlanning}"
+                            Margin="0,0,6,0" />
+                    <Button Grid.Column="2"
+                            Content="Cancel"
+                            Command="{Binding YtDlpImport.CancelReviewCommand}" />
+                </Grid>
+
+                <TextBlock Classes="FieldLabel"
+                           Text="{Binding YtDlpImport.StatusMessage}"
+                           TextWrapping="Wrap" />
+                <TextBlock Text="{Binding YtDlpImport.ReviewError}"
+                           TextWrapping="Wrap"
+                           Foreground="{StaticResource TextPrimary}"
+                           IsVisible="{Binding YtDlpImport.HasReviewError}" />
+
+                <StackPanel Spacing="6" IsVisible="{Binding YtDlpImport.HasPlan}">
+                    <WrapPanel>
+                        <TextBlock Classes="HeaderLabel" Margin="0,0,12,0" Text="{Binding YtDlpImport.TotalCount, StringFormat='{}{0} found'}" />
+                        <TextBlock Classes="HeaderLabel" Margin="0,0,12,0" Text="{Binding YtDlpImport.NewCount, StringFormat='{}{0} new'}" />
+                        <TextBlock Classes="HeaderLabel" Margin="0,0,12,0" Text="{Binding YtDlpImport.AlreadyImportedCount, StringFormat='{}{0} already imported'}" />
+                        <TextBlock Classes="HeaderLabel" Text="{Binding YtDlpImport.PreviouslyFailedCount, StringFormat='{}{0} previously failed'}" />
+                    </WrapPanel>
+
+                    <TextBlock Classes="FieldLabel"
+                               Text="{Binding YtDlpImport.MediaKindDisplay, StringFormat='Download as: {0}'}" />
+                    <SelectableTextBlock Classes="FieldLabel"
+                                         Text="{Binding YtDlpImport.DownloadLocationDisplay, StringFormat='Destination: {0}'}"
+                                         TextWrapping="Wrap" />
+
+                    <TextBlock Classes="FieldLabel" Text="New items" IsVisible="{Binding YtDlpImport.HasNewItems}" />
+                    <ListBox ItemsSource="{Binding YtDlpImport.NewItems}"
+                             MaxHeight="180"
+                             IsVisible="{Binding YtDlpImport.HasNewItems}">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate x:DataType="yt:YtDlpImportPlanItem">
+                                <StackPanel Margin="4,2">
+                                    <TextBlock Text="{Binding Entry.Title}" TextWrapping="Wrap" />
+                                    <TextBlock Classes="FieldLabel" Text="{Binding Entry.VideoId}" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+
+                    <WrapPanel>
+                        <Button Content="Confirm Import"
+                                Command="{Binding YtDlpImport.ConfirmImportCommand}"
+                                IsEnabled="{Binding YtDlpImport.HasNewItems}"
+                                Margin="0,0,6,0" />
+                        <Button Content="Cancel"
+                                Command="{Binding YtDlpImport.CancelReviewCommand}" />
+                    </WrapPanel>
+                </StackPanel>
+            </StackPanel>
+        </Border>
+
         <!-- Addendum §13: manual search scope, per-source checkboxes below plus these affordances. -->
-        <WrapPanel Grid.Row="2" Margin="0,0,0,4">
+        <WrapPanel Grid.Row="3" Margin="0,0,0,4">
             <Button Content="Select All" Command="{Binding SelectAllCommand}" Margin="0,0,6,6" />
             <Button Content="Select None" Command="{Binding SelectNoneCommand}" Margin="0,0,6,6" />
             <Button Content="Invert" Command="{Binding InvertSelectionCommand}" Margin="0,0,6,6" />
@@ -27,7 +102,7 @@
              External tools produce long, specific messages ("acoustic model 'x' is not installed
              (mfa model download acoustic x)") and those are only useful if they can be read in
              full and copied. -->
-        <Border Grid.Row="3"
+        <Border Grid.Row="4"
                 Margin="0,0,0,12"
                 Padding="10"
                 CornerRadius="4"
@@ -36,14 +111,14 @@
             <SelectableTextBlock Text="{Binding StatusMessage}" TextWrapping="Wrap" Foreground="{StaticResource TextPrimary}" />
         </Border>
 
-        <TextBlock Grid.Row="3"
+        <TextBlock Grid.Row="4"
                    Classes="FieldLabel"
                    Margin="0,0,0,12"
                    Text="{Binding StatusMessage}"
                    TextWrapping="Wrap"
                    IsVisible="{Binding !IsStatusError}" />
 
-        <ListBox Grid.Row="4" ItemsSource="{Binding Items}">
+        <ListBox Grid.Row="5" ItemsSource="{Binding Items}">
             <ListBox.ItemTemplate>
                 <DataTemplate x:DataType="vm:MediaRowViewModel">
                     <Border Padding="10" Margin="0,3" BorderThickness="1" BorderBrush="{StaticResource BorderMid}" CornerRadius="4">

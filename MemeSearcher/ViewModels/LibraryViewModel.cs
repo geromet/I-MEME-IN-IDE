@@ -12,6 +12,7 @@ using MemeSearcher.Core.Jobs;
 using MemeSearcher.Core.Settings;
 using MemeSearcher.Infrastructure.Library;
 using MemeSearcher.Infrastructure.Settings;
+using MemeSearcher.Infrastructure.YtDlp;
 using MemeSearcher.Services;
 
 namespace MemeSearcher.ViewModels;
@@ -22,7 +23,10 @@ public partial class LibraryViewModel(
     IFilePickerService filePicker,
     ISettingsStore settings,
     IPhoneNGramIndexService indexService,
-    IJobQueue jobQueue) : ViewModelBase
+    IJobQueue jobQueue,
+    YtDlpImportPlanner? ytDlpImportPlanner = null,
+    YtDlpImportOrchestrator? ytDlpImportOrchestrator = null,
+    YtDlpSettings? ytDlpSettings = null) : ViewModelBase
 {
     // The language new imports are transcribed and phonemized in, chosen in Settings (#24).
     // Shared with SearchViewModel through the same setting, since a search must be phonemized in
@@ -62,6 +66,16 @@ public partial class LibraryViewModel(
     }
 
     public ObservableCollection<MediaRowViewModel> Items { get; } = [];
+
+    /// <summary>
+    /// #27 URL review/confirm presentation. Existing direct-construction tests do not need yt-dlp
+    /// process/database dependencies, so the optional constructor parameters leave this null there;
+    /// the production container already registers all three dependencies and therefore supplies it.
+    /// </summary>
+    public YtDlpImportViewModel? YtDlpImport { get; } =
+        ytDlpImportPlanner is not null && ytDlpImportOrchestrator is not null && ytDlpSettings is not null
+            ? new YtDlpImportViewModel(ytDlpImportPlanner, ytDlpImportOrchestrator, jobQueue, settings, ytDlpSettings)
+            : null;
 
     /// <summary>Milestone 13: "N of M selected" - the same live scope indicator SearchViewModel shows in the search bar, kept here too since this is where the checkboxes actually live.</summary>
     [ObservableProperty]
