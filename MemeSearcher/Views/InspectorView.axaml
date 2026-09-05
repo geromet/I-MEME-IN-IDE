@@ -21,6 +21,25 @@
                 <TextBlock Classes="FieldLabel" Text="{Binding AlignmentSummary}" TextWrapping="Wrap" />
 
                 <StackPanel>
+                    <TextBlock Classes="HeaderLabel" Text="WAVEFORM CONTEXT" Margin="0,0,0,4" />
+                    <Border Height="46" Padding="2" BorderThickness="1" BorderBrush="{StaticResource BorderMid}"
+                            IsVisible="{Binding Waveform.HasBars}">
+                        <ItemsControl ItemsSource="{Binding Waveform.Bars}" VerticalAlignment="Bottom">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="1" VerticalAlignment="Bottom" /></ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:WaveformBarViewModel">
+                                    <Border Width="3" Height="{Binding Height}" VerticalAlignment="Bottom" Background="{StaticResource TextPrimary}" />
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </Border>
+                    <TextBlock Classes="FieldLabel" Text="{Binding Waveform.Status}" TextWrapping="Wrap" Margin="0,3,0,0"
+                               IsVisible="{Binding Waveform.HasStatus}" />
+                </StackPanel>
+
+                <StackPanel>
                     <TextBlock Classes="HeaderLabel" Text="PHONE TIMELINE" Margin="0,0,0,4" />
                     <ItemsControl ItemsSource="{Binding PhoneBlocks}">
                         <ItemsControl.ItemsPanel>
@@ -80,6 +99,22 @@
                                     <TextBlock Classes="FieldLabel" Text="{Binding QueryCoverageDisplay}" />
                                     <TextBlock Text="{Binding SourceText}" TextWrapping="Wrap" Foreground="{StaticResource TextPrimary}" />
                                     <TextBlock Classes="FieldLabel" Text="{Binding AlignmentSummary}" TextWrapping="Wrap" />
+                                    <TextBlock Classes="HeaderLabel" Text="WAVEFORM CONTEXT" Margin="0,3,0,0" />
+                                    <Border Height="46" Padding="2" BorderThickness="1" BorderBrush="{StaticResource BorderMid}"
+                                            IsVisible="{Binding Waveform.HasBars}">
+                                        <ItemsControl ItemsSource="{Binding Waveform.Bars}" VerticalAlignment="Bottom">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="1" VerticalAlignment="Bottom" /></ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate x:DataType="vm:WaveformBarViewModel">
+                                                    <Border Width="3" Height="{Binding Height}" VerticalAlignment="Bottom" Background="{StaticResource TextPrimary}" />
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </Border>
+                                    <TextBlock Classes="FieldLabel" Text="{Binding Waveform.Status}" TextWrapping="Wrap"
+                                               IsVisible="{Binding Waveform.HasStatus}" />
                                     <TextBlock Classes="HeaderLabel" Text="PHONE TIMELINE" Margin="0,3,0,0" />
                                     <ItemsControl ItemsSource="{Binding Phones}">
                                         <ItemsControl.ItemsPanel>
