@@ -27,11 +27,24 @@ public class CompositeSearchService(
         PhoneticSearchOptions? options = null,
         CancellationToken cancellationToken = default)
     {
-        options ??= PhoneticSearchOptions.ForMode(SearchMode.SimilarPhonetic);
-
         var phonemizedQuery = await queryCache.GetOrAddAsync(
             queryText, language, ct => phonemizer.PhonemizeAsync(queryText, language, ct), cancellationToken);
-        var queryTokens = PhoneStreamBuilder.BuildQueryTokens(phonemizedQuery);
+
+        return await SearchAsync(
+            PhoneStreamBuilder.BuildQueryTokens(phonemizedQuery), scope, options, cancellationToken);
+    }
+
+    /// <summary>
+    /// #36: direct-phone entry point for templates. Authored phones deliberately bypass the text
+    /// phonemizer/cache while sharing every downstream composite-search rule with the text path.
+    /// </summary>
+    public async Task<IReadOnlyList<CompositeSearchResult>> SearchAsync(
+        IReadOnlyList<PhoneToken> queryTokens,
+        SearchScope scope,
+        PhoneticSearchOptions? options = null,
+        CancellationToken cancellationToken = default)
+    {
+        options ??= PhoneticSearchOptions.ForMode(SearchMode.SimilarPhonetic);
         var queryPhonemeCount = queryTokens.Count(t => !t.IsBoundary);
 
         if (queryTokens.Count == 0 || queryPhonemeCount == 0)

@@ -15,4 +15,16 @@ public interface ICompositeSearchService
         SearchScope scope,
         PhoneticSearchOptions? options = null,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// #36: searches a composite query given directly as authored phone tokens, bypassing the
+    /// phonemizer/query cache exactly like IPhoneticSearchService's template-facing overload.
+    /// Downstream candidate ordering, matching, guardrails, ranking and result construction remain
+    /// identical to text composite search.
+    /// </summary>
+    Task<IReadOnlyList<CompositeSearchResult>> SearchAsync(
+        IReadOnlyList<PhoneToken> queryTokens,
+        SearchScope scope,
+        PhoneticSearchOptions? options = null,
+        CancellationToken cancellationToken = default);
 }

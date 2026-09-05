@@ -73,6 +73,26 @@ public class TemplateService(IDbContextFactory<MemeSearcherDbContext> dbContextF
         await context.SaveChangesAsync(cancellationToken);
     }
 
+    /// <summary>
+    /// #36: persists explicitly authored matcher knobs as the existing SearchOptionsJson payload.
+    /// Keeping serialization at this CRUD boundary means TemplateSearchService remains the single
+    /// consumer and no parallel template-options model is introduced.
+    /// </summary>
+    public async Task SetSearchOptionsAsync(Guid templateId, string? searchOptionsJson, CancellationToken cancellationToken = default)
+    {
+        await using var context = await dbContextFactory.CreateDbContextAsync(cancellationToken);
+
+        var template = await context.Templates.FindAsync([templateId], cancellationToken);
+        if (template is null)
+        {
+            return;
+        }
+
+        template.SearchOptionsJson = string.IsNullOrWhiteSpace(searchOptionsJson) ? null : searchOptionsJson;
+        template.UpdatedAt = DateTimeOffset.UtcNow;
+        await context.SaveChangesAsync(cancellationToken);
+    }
+
     public async Task SetTargetCatalogAsync(Guid templateId, Guid? catalogId, CancellationToken cancellationToken = default)
     {
         await using var context = await dbContextFactory.CreateDbContextAsync(cancellationToken);
@@ -171,6 +191,7 @@ public class TemplateService(IDbContextFactory<MemeSearcherDbContext> dbContextF
             template.Description,
             template.Mode,
             template.TargetCatalogId,
+            template.SearchOptionsJson,
             template.CreatedAt,
             variants
                 .OrderBy(v => v.Sequence)
