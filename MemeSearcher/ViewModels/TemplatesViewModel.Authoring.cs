@@ -1,6 +1,9 @@
+using System.Linq;
 using System.Text.Json;
+using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.Input;
 using MemeSearcher.Core.Phonetics;
+using MemeSearcher.Infrastructure.Templates;
 
 namespace MemeSearcher.ViewModels;
 
