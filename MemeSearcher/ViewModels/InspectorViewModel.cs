@@ -10,14 +10,9 @@ using MemeSearcher.Core.Search;
 namespace MemeSearcher.ViewModels;
 
 /// <summary>
-/// Backs the shell's Inspector panel (#15, Milestone 12's placeholder): the aligned phone timeline,
-/// the query-to-match correspondence, and click-to-seek for a selected search result. Waveform
-/// rendering is deliberately out of scope here - see the issue's own "treat as stretch goal" note
-/// and the follow-up filed for it.
-///
-/// Owned by MainWindowViewModel and driven by whichever SearchViewModel is the active tab
-/// (SearchResultRowViewModel.SelectedResult); MainWindowViewModel calls Show() whenever the active
-/// tab or its selection changes.
+/// Backs the shared Inspector panel for single-source and composite results. Both modes reuse the
+/// same phone timing primitive; composite sections project already-shipped component provenance
+/// rather than creating a second alignment model. Waveform remains the later #35 slice.
 /// </summary>
 public partial class InspectorViewModel(IMediaPlayerLauncher playerLauncher) : ViewModelBase
 {
@@ -25,9 +20,14 @@ public partial class InspectorViewModel(IMediaPlayerLauncher playerLauncher) : V
     private bool _hasSelection;
 
     [ObservableProperty]
+    private bool _isSingleSelection;
+
+    [ObservableProperty]
+    private bool _isCompositeSelection;
+
+    [ObservableProperty]
     private string _sourceTextDisplay = "";
 
-    /// <summary>Human summary of whether every, some, or none of this match's phones came from real per-phone alignment (handoff §49's predicted-vs-actual distinction, made visible).</summary>
     [ObservableProperty]
     private string _alignmentSummary = "";
 
@@ -41,42 +41,27 @@ public partial class InspectorViewModel(IMediaPlayerLauncher playerLauncher) : V
     private bool _hasAlignmentSteps;
 
     public ObservableCollection<PhoneBlockViewModel> PhoneBlocks { get; } = [];
+    public ObservableCollection<CompositeInspectorComponentViewModel> CompositeComponents { get; } = [];
 
-    /// <summary>#25: the same shared coverage strip the results list shows per row, rendered larger here - replaces the old flat WrapPanel-of-chips rendering for query positions, per the issue's instruction that #15 and #25 share one phone-strip control.</summary>
     [ObservableProperty]
     private PhoneCoverageStripViewModel _coverageStrip = new([]);
 
     [ObservableProperty]
     private bool _hasExtraPhonemes;
 
-    /// <summary>
-    /// #25: phones the match has that the query never asked for (AlignmentOp.CandidateExtra) - the
-    /// one alignment op a query-position-indexed strip structurally cannot place, since it consumes
-    /// no query position at all. Kept as its own small display rather than dropped, since it's a
-    /// distinct quality signal #15 already surfaced ("+t" chips) and the exit criterion for #25 is
-    /// "distinguishing exact from substituted phones", not "replace #15's correspondence display".
-    /// </summary>
     public ObservableCollection<string> ExtraPhonemes { get; } = [];
 
     public void Show(SearchResultRowViewModel? result)
     {
-        PhoneBlocks.Clear();
-        ExtraPhonemes.Clear();
-        SeekStatus = "";
+        ResetPresentation();
 
         if (result is null)
         {
-            HasSelection = false;
-            SourceTextDisplay = "";
-            AlignmentSummary = "";
-            MediaPath = null;
-            HasAlignmentSteps = false;
-            HasExtraPhonemes = false;
-            CoverageStrip = new PhoneCoverageStripViewModel([]);
             return;
         }
 
         HasSelection = true;
+        IsSingleSelection = true;
         SourceTextDisplay = result.SourceText;
         MediaPath = result.MediaPath;
 
@@ -97,14 +82,26 @@ public partial class InspectorViewModel(IMediaPlayerLauncher playerLauncher) : V
         }
 
         HasExtraPhonemes = ExtraPhonemes.Count > 0;
+        AlignmentSummary = SummarizeAlignment(PhoneBlocks, "match");
+    }
 
-        AlignmentSummary = PhoneBlocks.Count == 0
-            ? "No phone timing available for this match."
-            : PhoneBlocks.All(p => p.IsAligned)
-                ? "Precisely aligned (real per-phone timing)."
-                : PhoneBlocks.Any(p => p.IsAligned)
-                    ? "Partially aligned - some phones are estimated."
-                    : "Estimated timing - no phone-level alignment has run for this source.";
+    /// <summary>#35: show every component in assembly order using the provenance already present on the composite row.</summary>
+    public void ShowComposite(CompositeSearchResultRowViewModel? result)
+    {
+        ResetPresentation();
+
+        if (result is null)
+        {
+            return;
+        }
+
+        HasSelection = true;
+        IsCompositeSelection = true;
+
+        for (var index = 0; index < result.Components.Count; index++)
+        {
+            CompositeComponents.Add(new CompositeInspectorComponentViewModel(result.Components[index], index + 1));
+        }
     }
 
     [RelayCommand]
@@ -116,14 +113,57 @@ public partial class InspectorViewModel(IMediaPlayerLauncher playerLauncher) : V
         }
 
         var outcome = await playerLauncher.OpenAsync(MediaPath, start);
-
-        SeekStatus = outcome switch
-        {
-            { Success: true, SeekedToTimestamp: true } => $"Seeked to \"{block.Symbol}\" at {FormatTimestamp(start)}.",
-            { Success: true, SeekedToTimestamp: false } => "Opened, but no seek-capable player (mpv/vlc) was found.",
-            _ => $"Couldn't open media: {outcome.Error}",
-        };
+        SeekStatus = FormatSeekOutcome(outcome, block.Symbol, start, null);
     }
+
+    [RelayCommand]
+    private async Task SeekCompositeAsync(CompositeInspectorPhoneViewModel phone)
+    {
+        if (phone.MediaPath is null || phone.Block.StartSeconds is not { } start)
+        {
+            return;
+        }
+
+        var outcome = await playerLauncher.OpenAsync(phone.MediaPath, start);
+        SeekStatus = FormatSeekOutcome(outcome, phone.Block.Symbol, start, phone.MediaTitle);
+    }
+
+    private void ResetPresentation()
+    {
+        HasSelection = false;
+        IsSingleSelection = false;
+        IsCompositeSelection = false;
+        SourceTextDisplay = "";
+        AlignmentSummary = "";
+        MediaPath = null;
+        SeekStatus = "";
+        HasAlignmentSteps = false;
+        HasExtraPhonemes = false;
+        CoverageStrip = new PhoneCoverageStripViewModel([]);
+        PhoneBlocks.Clear();
+        ExtraPhonemes.Clear();
+        CompositeComponents.Clear();
+    }
+
+    private static string SummarizeAlignment(System.Collections.Generic.IEnumerable<PhoneBlockViewModel> phones, string subject)
+    {
+        var list = phones.ToList();
+        return list.Count == 0
+            ? $"No phone timing available for this {subject}."
+            : list.All(p => p.IsAligned)
+                ? "Precisely aligned (real per-phone timing)."
+                : list.Any(p => p.IsAligned)
+                    ? "Partially aligned - some phones are estimated."
+                    : "Estimated timing - no phone-level alignment has run for this source.";
+    }
+
+    private static string FormatSeekOutcome(MediaLaunchResult outcome, string symbol, double start, string? mediaTitle) => outcome switch
+    {
+        { Success: true, SeekedToTimestamp: true } when mediaTitle is not null => $"Seeked {mediaTitle} to \"{symbol}\" at {FormatTimestamp(start)}.",
+        { Success: true, SeekedToTimestamp: true } => $"Seeked to \"{symbol}\" at {FormatTimestamp(start)}.",
+        { Success: true, SeekedToTimestamp: false } => "Opened, but no seek-capable player (mpv/vlc) was found.",
+        _ => $"Couldn't open media: {outcome.Error}",
+    };
 
     private static string FormatTimestamp(double seconds) => TimeSpan.FromSeconds(seconds).ToString(@"hh\:mm\:ss\.ff");
 }

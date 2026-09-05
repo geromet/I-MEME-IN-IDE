@@ -23,6 +23,13 @@ public class CompositeComponentRowViewModel(CompositeMatchComponent component, s
     public double? StartSeconds { get; } = component.StartSeconds;
     public double? EndSeconds { get; } = component.EndSeconds;
 
+    /// <summary>#35: component coverage is already stored in boundary-filtered query-phone coordinates as [Start, End); expose it for Inspector rather than reconstructing it.</summary>
+    public int QueryStart { get; } = component.QueryStart;
+    public int QueryEnd { get; } = component.QueryEnd;
+    public string QueryCoverageDisplay { get; } = component.QueryEnd > component.QueryStart
+        ? $"Query phones {component.QueryStart + 1}-{component.QueryEnd}"
+        : "No query-phone coverage";
+
     /// <summary>Whether this component can be located in time (#32).</summary>
     public bool HasTiming { get; } = component.StartSeconds is not null && component.EndSeconds is not null;
 
