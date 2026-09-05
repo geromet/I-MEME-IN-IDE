@@ -21,6 +21,12 @@ public class LibraryService(IDbContextFactory<MemeSearcherDbContext> dbContextFa
             .OrderByDescending(m => m.CreatedAt)
             .ToList();
 
+        var transcriptMediaIds = (await context.Transcripts
+            .Select(t => t.MediaId)
+            .Distinct()
+            .ToListAsync(cancellationToken))
+            .ToHashSet();
+
         var segmentCounts = await (
             from t in context.Transcripts
             join s in context.Segments on t.Id equals s.TranscriptId
@@ -41,6 +47,29 @@ public class LibraryService(IDbContextFactory<MemeSearcherDbContext> dbContextFa
             }
         ).ToDictionaryAsync(x => x.MediaId, x => x, cancellationToken);
 
+        // #34 alignment state is word coverage, matching RealignAsync's own user-facing coverage
+        // denominator. One aligned word may have several Phone rows, so project distinct word IDs
+        // first and count per media client-side rather than over-counting phones.
+        var alignedWords = await (
+            from t in context.Transcripts
+            join s in context.Segments on t.Id equals s.TranscriptId
+            join w in context.Words on s.Id equals w.SegmentId
+            join p in context.Phones on w.Id equals p.WordId
+            select new { t.MediaId, WordId = w.Id }
+        ).Distinct().ToListAsync(cancellationToken);
+
+        var alignedWordCounts = alignedWords
+            .GroupBy(x => x.MediaId)
+            .ToDictionary(g => g.Key, g => g.Count());
+
+        // The current index has no separate per-media generation/version row. Persisted postings
+        // are therefore the exact factual existence signal available today; do not infer freshness.
+        var indexedMediaIds = (await context.PhoneNGramPostings
+            .Select(p => p.MediaId)
+            .Distinct()
+            .ToListAsync(cancellationToken))
+            .ToHashSet();
+
         return media.Select(m =>
         {
             var words = wordStats.GetValueOrDefault(m.Id);
@@ -52,9 +81,12 @@ public class LibraryService(IDbContextFactory<MemeSearcherDbContext> dbContextFa
                 m.Duration,
                 m.Language,
                 m.CreatedAt,
+                transcriptMediaIds.Contains(m.Id),
                 segmentCounts.GetValueOrDefault(m.Id),
                 words?.WordCount ?? 0,
                 words?.PhonemizedCount ?? 0,
+                alignedWordCounts.GetValueOrDefault(m.Id),
+                indexedMediaIds.Contains(m.Id),
                 m.IsSelectedForSearch);
         }).ToList();
     }
