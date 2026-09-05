@@ -178,12 +178,32 @@ public partial class SearchViewModel(
         IsBusy = true;
         StatusMessage = "Searching...";
         CanWidenToFullCorpus = false;
+        FacetValidationMessage = "";
         // A new search invalidates any open draft - its slots reference rows from the previous
         // result set, which Results/ResultGroups are about to be cleared and replaced.
         AssemblyDraft = null;
 
         try
         {
+            // #43: resolve persistent selection ∩ temporary facets before phonemization or either
+            // search service. Composite candidate generation therefore cannot see excluded media.
+            var liveScope = scopeOverride is null
+                ? await ResolveLiveScopeAsync()
+                : await DescribeExplicitScopeAsync(scopeOverride);
+            var (scope, description, idsForHistory) = liveScope;
+            ScopeSummary = description;
+
+            if (scopeOverride is null && HasActiveFacets && scope is SearchScope.SelectedMedia { MediaIds.Count: 0 })
+            {
+                QueryIpa = "";
+                ClearSearchResults();
+                StatusMessage = "0 sources match these filters.";
+                await searchHistoryService.RecordAsync(
+                    QueryText, Language, IsCompositeMode, description, 0, idsForHistory);
+                await LoadRecentSearchesAsync();
+                return;
+            }
+
             // Milestone 7: goes through the same query-representation cache the search services
             // use, so this call and the one inside SearchAsync/SearchCompositeAsync below (same
             // query text/language, one request apart) don't phonemize the query twice.
@@ -191,22 +211,22 @@ public partial class SearchViewModel(
                 QueryText, Language, ct => phonemizer.PhonemizeAsync(QueryText, Language, ct));
             QueryIpa = phonemized.Ipa;
 
-            var (scope, description, idsForHistory) = scopeOverride is null
-                ? await ResolveLiveScopeAsync()
-                : await DescribeExplicitScopeAsync(scopeOverride);
-            ScopeSummary = description;
-
             var resultCount = IsCompositeMode
                 ? await SearchCompositeAsync(scope)
                 : await SearchSingleSourceAsync(scope);
 
-            // Only offer widening when scoping is the reason there's nothing to show - a search
-            // that already covers the whole corpus has nowhere wider to go.
-            CanWidenToFullCorpus = resultCount == 0 && scope is SearchScope.SelectedMedia;
+            // Widening remains for durable source selection. Temporary filters are explicit user
+            // intent, so an empty filtered search does not silently offer to bypass them.
+            CanWidenToFullCorpus = resultCount == 0 && scope is SearchScope.SelectedMedia && !HasActiveFacets;
 
             await searchHistoryService.RecordAsync(
                 QueryText, Language, IsCompositeMode, description, resultCount, idsForHistory);
             await LoadRecentSearchesAsync();
+        }
+        catch (ArgumentException ex) when (ex.ParamName == "facets")
+        {
+            FacetValidationMessage = ex.Message;
+            StatusMessage = "Fix the search filters before searching.";
         }
         catch (Exception ex)
         {
@@ -218,28 +238,53 @@ public partial class SearchViewModel(
         }
     }
 
+    private void ClearSearchResults()
+    {
+        SelectedResult = null;
+        SelectedComponent = null;
+        Results.Clear();
+        CompositeResults.Clear();
+        ResultGroups.Clear();
+        _allResults = [];
+        StartAssemblyCommand.NotifyCanExecuteChanged();
+    }
+
     /// <summary>
-    /// The live scope from the library panel's checkboxes right now. Selecting everything reports
-    /// as AllIndexedMedia (not a same-length SelectedMedia list) so history and reruns resolve
-    /// against whatever is indexed *at rerun time* - matching the pre-#13 "All indexed media"
-    /// behaviour by default, and not silently freezing a scope the user never meant to narrow.
+    /// The live scope from the library panel's durable checkboxes, optionally narrowed by #43's
+    /// temporary facets. Facets always resolve to SelectedMedia, even when every durable source
+    /// happens to match, so history captures the exact effective ID set instead of losing the
+    /// temporary-filter meaning as AllIndexedMedia.
     /// </summary>
     private async Task<(SearchScope Scope, string Description, IReadOnlyCollection<Guid>? IdsForHistory)> ResolveLiveScopeAsync()
     {
-        var (selectedIds, total) = await libraryService.GetSelectionSummaryAsync();
-
-        if (selectedIds.Count == total)
+        if (!TryBuildFacets(out var facets, out var validationError))
         {
-            return (new SearchScope.AllIndexedMedia(), "All indexed media", null);
+            throw new ArgumentException(validationError, "facets");
         }
 
-        // Milestone 17 (#20): a catalog applied to the scope reads as "Catalog: name (n sources)"
-        // rather than the generic count - see LibraryService.ActiveCatalogLabel.
-        var description = libraryService.ActiveCatalogLabel is { } catalogLabel
-            ? $"Catalog: {catalogLabel} ({selectedIds.Count} source(s))"
-            : $"{selectedIds.Count} of {total} source(s)";
+        var (selectedIds, total) = await libraryService.GetSelectionSummaryAsync();
+        if (facets.IsEmpty)
+        {
+            if (selectedIds.Count == total)
+            {
+                return (new SearchScope.AllIndexedMedia(), "All indexed media", null);
+            }
 
-        return (new SearchScope.SelectedMedia(selectedIds), description, selectedIds);
+            // Milestone 17 (#20): a catalog applied to the scope reads as "Catalog: name (n sources)"
+            // rather than the generic count - see LibraryService.ActiveCatalogLabel.
+            var durableDescription = libraryService.ActiveCatalogLabel is { } catalogLabel
+                ? $"Catalog: {catalogLabel} ({selectedIds.Count} source(s))"
+                : $"{selectedIds.Count} of {total} source(s)";
+
+            return (new SearchScope.SelectedMedia(selectedIds), durableDescription, selectedIds);
+        }
+
+        var (effectiveIds, _) = await libraryService.GetSelectionSummaryAsync(facets);
+        var description = effectiveIds.Count == 0
+            ? $"0 sources match filters ({selectedIds.Count} selected of {total})"
+            : $"{effectiveIds.Count} matching / {selectedIds.Count} selected of {total} source(s)";
+
+        return (new SearchScope.SelectedMedia(effectiveIds), description, effectiveIds);
     }
 
     private async Task<(SearchScope Scope, string Description, IReadOnlyCollection<Guid>? IdsForHistory)> DescribeExplicitScopeAsync(SearchScope scope)
@@ -257,8 +302,17 @@ public partial class SearchViewModel(
     [RelayCommand]
     public async Task RefreshScopeSummaryAsync()
     {
-        var (_, description, _) = await ResolveLiveScopeAsync();
-        ScopeSummary = description;
+        FacetValidationMessage = "";
+        try
+        {
+            var (_, description, _) = await ResolveLiveScopeAsync();
+            ScopeSummary = description;
+        }
+        catch (ArgumentException ex) when (ex.ParamName == "facets")
+        {
+            FacetValidationMessage = ex.Message;
+            ScopeSummary = "Invalid temporary filters";
+        }
     }
 
     [RelayCommand]
