@@ -35,7 +35,8 @@
                                     <TextBlock Classes="FieldLabel" Text="{Binding Description}" TextWrapping="Wrap" IsVisible="{Binding HasDescription}" />
                                     <TextBlock Classes="HeaderLabel" Text="{Binding VariantCountDisplay}" />
                                     <WrapPanel Margin="0,4,0,0">
-                                        <Button Content="Run" Margin="0,0,6,6" Command="{Binding #Root.((vm:TemplatesViewModel)DataContext).RunCommand}" CommandParameter="{Binding}" ToolTip.Tip="Search using this template's phone sequences, bypassing the phonemizer." />
+                                        <Button Content="Run" Margin="0,0,6,6" Command="{Binding #Root.((vm:TemplatesViewModel)DataContext).RunCommand}" CommandParameter="{Binding}" ToolTip.Tip="Search each source independently using this template's authored phones." />
+                                        <Button Content="Run Composite" Margin="0,0,6,6" Command="{Binding #Root.((vm:TemplatesViewModel)DataContext).RunCompositeCommand}" CommandParameter="{Binding}" ToolTip.Tip="Allow this template's authored phones to be assembled across multiple source files." />
                                         <Button Content="Rename" Margin="0,0,6,6" Command="{Binding #Root.((vm:TemplatesViewModel)DataContext).BeginRenameCommand}" CommandParameter="{Binding}" IsVisible="{Binding !IsPendingDelete}" />
                                         <Button Content="Export..." Margin="0,0,6,6" Command="{Binding #Root.((vm:TemplatesViewModel)DataContext).ExportCommand}" CommandParameter="{Binding}" IsVisible="{Binding !IsPendingDelete}" />
                                         <Button Content="Delete" Margin="0,0,6,6" Command="{Binding #Root.((vm:TemplatesViewModel)DataContext).DeleteCommand}" CommandParameter="{Binding}" IsVisible="{Binding !IsPendingDelete}" />
@@ -138,23 +139,58 @@
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
 
-                    <ListBox Grid.Row="2" Margin="0,8,0,0" ItemsSource="{Binding Results}">
-                        <ListBox.ItemTemplate>
-                            <DataTemplate x:DataType="vm:SearchResultRowViewModel">
-                                <Border Padding="8" Margin="0,2" BorderThickness="0,0,0,1" BorderBrush="{StaticResource BorderMid}">
-                                    <StackPanel Spacing="2">
-                                        <StackPanel Orientation="Horizontal" Spacing="12">
-                                            <TextBlock Text="{Binding ScoreDisplay}" FontWeight="Bold" Foreground="{StaticResource TextPrimary}" />
-                                            <TextBlock Classes="HeaderLabel" Text="{Binding TimeRangeDisplay}" />
+                    <Grid Grid.Row="2" Margin="0,8,0,0">
+                        <ListBox ItemsSource="{Binding Results}">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate x:DataType="vm:SearchResultRowViewModel">
+                                    <Border Padding="8" Margin="0,2" BorderThickness="0,0,0,1" BorderBrush="{StaticResource BorderMid}">
+                                        <StackPanel Spacing="2">
+                                            <StackPanel Orientation="Horizontal" Spacing="12">
+                                                <TextBlock Text="{Binding ScoreDisplay}" FontWeight="Bold" Foreground="{StaticResource TextPrimary}" />
+                                                <TextBlock Classes="HeaderLabel" Text="{Binding TimeRangeDisplay}" />
+                                            </StackPanel>
+                                            <TextBlock Text="{Binding SourceText}" FontSize="15" Foreground="{StaticResource TextPrimary}" />
+                                            <TextBlock Text="{Binding Ipa}" FontFamily="monospace" Foreground="{StaticResource TextSecondary}" />
+                                            <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,4,0,0"><Button Content="▶ Play" Command="{Binding PlayCommand}" /></StackPanel>
                                         </StackPanel>
-                                        <TextBlock Text="{Binding SourceText}" FontSize="15" Foreground="{StaticResource TextPrimary}" />
-                                        <TextBlock Text="{Binding Ipa}" FontFamily="monospace" Foreground="{StaticResource TextSecondary}" />
-                                        <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,4,0,0"><Button Content="▶ Play" Command="{Binding PlayCommand}" /></StackPanel>
-                                    </StackPanel>
-                                </Border>
-                            </DataTemplate>
-                        </ListBox.ItemTemplate>
-                    </ListBox>
+                                    </Border>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+
+                        <ListBox ItemsSource="{Binding CompositeResults}">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate x:DataType="vm:CompositeSearchResultRowViewModel">
+                                    <Border Padding="8" Margin="0,2" BorderThickness="0,0,0,1" BorderBrush="{StaticResource BorderMid}">
+                                        <StackPanel Spacing="4">
+                                            <WrapPanel>
+                                                <TextBlock Text="{Binding ScoreDisplay}" FontWeight="Bold" Foreground="{StaticResource TextPrimary}" Margin="0,0,12,0" />
+                                                <TextBlock Classes="HeaderLabel" Text="{Binding SourceCountDisplay}" />
+                                            </WrapPanel>
+                                            <ItemsControl ItemsSource="{Binding Components}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate x:DataType="vm:CompositeComponentRowViewModel">
+                                                        <Border Padding="6" Margin="0,2" BorderThickness="1" BorderBrush="{StaticResource BorderMid}" CornerRadius="3">
+                                                            <StackPanel Spacing="2">
+                                                                <WrapPanel>
+                                                                    <TextBlock Text="{Binding MediaTitle}" FontWeight="Bold" Foreground="{StaticResource TextPrimary}" Margin="0,0,10,0" />
+                                                                    <TextBlock Classes="HeaderLabel" Text="{Binding TimeRangeDisplay}" />
+                                                                </WrapPanel>
+                                                                <TextBlock Text="{Binding SourceText}" TextWrapping="Wrap" />
+                                                                <TextBlock Text="{Binding Ipa}" FontFamily="monospace" Foreground="{StaticResource TextSecondary}" TextWrapping="Wrap" />
+                                                            </StackPanel>
+                                                        </Border>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                            <Button Content="Export assembled clip..." Command="{Binding ExportClipCommand}" HorizontalAlignment="Left" />
+                                            <TextBlock Classes="FieldLabel" Text="{Binding ExportStatus}" TextWrapping="Wrap" />
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </Grid>
                 </Grid>
             </Grid>
         </Grid>
