@@ -4,20 +4,17 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:vm="using:MemeSearcher.ViewModels"
              xmlns:views="using:MemeSearcher.Views"
-             mc:Ignorable="d" d:DesignWidth="280" d:DesignHeight="550"
+             mc:Ignorable="d" d:DesignWidth="300" d:DesignHeight="650"
              x:Class="MemeSearcher.Views.InspectorView"
              x:DataType="vm:InspectorViewModel"
              x:Name="Root">
-    <!-- #15: phone-level timeline (aligned vs estimated) and the query-to-match correspondence for
-         the selected result. Waveform rendering is explicitly out of scope - see the issue's own
-         "stretch goal" note. Extracted into its own UserControl by #19 so it can be registered as a
-         panel instead of living inline in the shell. -->
     <DockPanel Margin="10">
         <TextBlock DockPanel.Dock="Top" Classes="PanelHeader" Text="INSPECTOR" Margin="0,0,0,8" />
         <TextBlock DockPanel.Dock="Top" Classes="FieldLabel" TextWrapping="Wrap"
                    Text="Select a result to inspect it."
                    IsVisible="{Binding !HasSelection}" />
-        <ScrollViewer IsVisible="{Binding HasSelection}">
+
+        <ScrollViewer IsVisible="{Binding IsSingleSelection}">
             <StackPanel Spacing="10">
                 <TextBlock Text="{Binding SourceTextDisplay}" TextWrapping="Wrap"
                            Foreground="{StaticResource TextPrimary}" />
@@ -27,9 +24,7 @@
                     <TextBlock Classes="HeaderLabel" Text="PHONE TIMELINE" Margin="0,0,0,4" />
                     <ItemsControl ItemsSource="{Binding PhoneBlocks}">
                         <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate>
-                                <WrapPanel Orientation="Horizontal" />
-                            </ItemsPanelTemplate>
+                            <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
                         </ItemsControl.ItemsPanel>
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="vm:PhoneBlockViewModel">
@@ -45,33 +40,67 @@
                 </StackPanel>
 
                 <StackPanel IsVisible="{Binding HasAlignmentSteps}">
-                    <!-- #25: the same coverage-strip control the results list uses per row, larger
-                         here - shared per the issue's instruction rather than this panel growing
-                         its own separate chip rendering of the same alignment data. -->
                     <TextBlock Classes="HeaderLabel" Text="QUERY COVERAGE" Margin="0,0,0,4" />
                     <views:PhoneCoverageStripView DataContext="{Binding CoverageStrip}" CellWidth="26" CellHeight="26" CellFontSize="13" />
-
-                    <!-- #25: phones the match has that the query never asked for - a
-                         query-indexed strip can't place these (they consume no query position),
-                         so they keep #15's original chip rendering rather than being lost. -->
                     <StackPanel IsVisible="{Binding HasExtraPhonemes}" Margin="0,8,0,0">
                         <TextBlock Classes="HeaderLabel" Text="EXTRA IN MATCH (not in query)" Margin="0,0,0,4" />
                         <ItemsControl ItemsSource="{Binding ExtraPhonemes}">
                             <ItemsControl.ItemsPanel>
-                                <ItemsPanelTemplate>
-                                    <WrapPanel Orientation="Horizontal" />
-                                </ItemsPanelTemplate>
+                                <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
                             </ItemsControl.ItemsPanel>
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <Border Classes="AlignmentChip Problem">
-                                        <TextBlock Text="{Binding}" />
-                                    </Border>
+                                    <Border Classes="AlignmentChip Problem"><TextBlock Text="{Binding}" /></Border>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
                     </StackPanel>
                 </StackPanel>
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- #35: the composite result is not flattened into a fake single source. Each existing
+             MatchComponent keeps its own media, timing, phone provenance and query span. -->
+        <ScrollViewer IsVisible="{Binding IsCompositeSelection}">
+            <StackPanel Spacing="10">
+                <ItemsControl ItemsSource="{Binding CompositeComponents}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:CompositeInspectorComponentViewModel">
+                            <Border Padding="8" Margin="0,0,0,8" BorderThickness="1"
+                                    BorderBrush="{StaticResource BorderMid}" CornerRadius="4">
+                                <StackPanel Spacing="5">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <TextBlock Classes="HeaderLabel" Text="{Binding OrdinalDisplay}" FontWeight="Bold" />
+                                        <TextBlock Text="{Binding MediaTitle}" FontWeight="Bold" Foreground="{StaticResource TextPrimary}" />
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <TextBlock Classes="FieldLabel" Text="{Binding TimeRangeDisplay}" />
+                                        <TextBlock Classes="FieldLabel" Text="{Binding ScoreDisplay}" />
+                                    </StackPanel>
+                                    <TextBlock Classes="FieldLabel" Text="{Binding QueryCoverageDisplay}" />
+                                    <TextBlock Text="{Binding SourceText}" TextWrapping="Wrap" Foreground="{StaticResource TextPrimary}" />
+                                    <TextBlock Classes="FieldLabel" Text="{Binding AlignmentSummary}" TextWrapping="Wrap" />
+                                    <TextBlock Classes="HeaderLabel" Text="PHONE TIMELINE" Margin="0,3,0,0" />
+                                    <ItemsControl ItemsSource="{Binding Phones}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="vm:CompositeInspectorPhoneViewModel">
+                                                <Button Classes.Aligned="{Binding Block.IsAligned}" Classes.Estimated="{Binding !Block.IsAligned}"
+                                                        Classes="PhoneBlock" Width="{Binding Block.Width}" Content="{Binding Block.Symbol}"
+                                                        ToolTip.Tip="{Binding Block.TimingTooltip}" IsEnabled="{Binding Block.HasTiming}"
+                                                        Command="{Binding #Root.((vm:InspectorViewModel)DataContext).SeekCompositeCommand}"
+                                                        CommandParameter="{Binding}" />
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <TextBlock Classes="FieldLabel" Text="{Binding SeekStatus}" TextWrapping="Wrap" />
             </StackPanel>
         </ScrollViewer>
     </DockPanel>
