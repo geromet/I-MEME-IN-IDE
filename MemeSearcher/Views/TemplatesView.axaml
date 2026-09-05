@@ -4,14 +4,13 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:vm="using:MemeSearcher.ViewModels"
              xmlns:models="using:MemeSearcher.Core.Models"
-             mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="600"
+             mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="700"
              x:Class="MemeSearcher.Views.TemplatesView"
              x:DataType="vm:TemplatesViewModel"
              x:Name="Root">
     <Grid Margin="12" RowDefinitions="Auto,Auto,Auto,*">
         <TextBlock Grid.Row="0" Classes="PanelHeader" Text="TEMPLATES" Margin="0,0,0,8" />
 
-        <!-- #21: a template is a named, saved query defined as hand-authored phones rather than text. -->
         <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="6" Margin="0,0,0,4">
             <TextBox Text="{Binding NewTemplateName}" PlaceholderText="Template name" Width="160" />
             <TextBox Text="{Binding NewTemplateDescription}" PlaceholderText="Description (optional)" Width="220" />
@@ -20,27 +19,13 @@
             <Button Content="Load Starter Templates" Command="{Binding LoadStarterTemplatesCommand}" ToolTip.Tip="A small shipped set demonstrating sounds text search can't express." />
         </StackPanel>
 
-        <Border Grid.Row="2"
-                Margin="0,0,0,12"
-                Padding="10"
-                CornerRadius="4"
-                Background="{StaticResource StatusErrorMuted}"
-                IsVisible="{Binding IsStatusError}">
+        <Border Grid.Row="2" Margin="0,0,0,12" Padding="10" CornerRadius="4" Background="{StaticResource StatusErrorMuted}" IsVisible="{Binding IsStatusError}">
             <SelectableTextBlock Text="{Binding StatusMessage}" TextWrapping="Wrap" Foreground="{StaticResource TextPrimary}" />
         </Border>
-
-        <TextBlock Grid.Row="2"
-                   Classes="FieldLabel"
-                   Margin="0,0,0,12"
-                   Text="{Binding StatusMessage}"
-                   TextWrapping="Wrap"
-                   IsVisible="{Binding !IsStatusError}" />
+        <TextBlock Grid.Row="2" Classes="FieldLabel" Margin="0,0,0,12" Text="{Binding StatusMessage}" TextWrapping="Wrap" IsVisible="{Binding !IsStatusError}" />
 
         <Grid Grid.Row="3" ColumnDefinitions="*,1.4*">
-            <ListBox Grid.Column="0"
-                     Margin="0,0,6,0"
-                     ItemsSource="{Binding Templates}"
-                     SelectedItem="{Binding SelectedTemplate}">
+            <ListBox Grid.Column="0" Margin="0,0,6,0" ItemsSource="{Binding Templates}" SelectedItem="{Binding SelectedTemplate}">
                 <ListBox.ItemTemplate>
                     <DataTemplate x:DataType="vm:TemplateRowViewModel">
                         <Border Padding="10" Margin="0,3" BorderThickness="1" BorderBrush="{StaticResource BorderMid}" CornerRadius="4">
@@ -49,55 +34,21 @@
                                     <TextBlock Text="{Binding Name}" FontSize="14" FontWeight="Bold" Foreground="{StaticResource TextPrimary}" TextWrapping="Wrap" />
                                     <TextBlock Classes="FieldLabel" Text="{Binding Description}" TextWrapping="Wrap" IsVisible="{Binding HasDescription}" />
                                     <TextBlock Classes="HeaderLabel" Text="{Binding VariantCountDisplay}" />
-
                                     <WrapPanel Margin="0,4,0,0">
-                                        <Button Content="Run"
-                                                Margin="0,0,6,6"
-                                                Command="{Binding #Root.((vm:TemplatesViewModel)DataContext).RunCommand}"
-                                                CommandParameter="{Binding}"
-                                                ToolTip.Tip="Search using this template's phone sequences, bypassing the phonemizer." />
-                                        <Button Content="Rename"
-                                                Margin="0,0,6,6"
-                                                Command="{Binding #Root.((vm:TemplatesViewModel)DataContext).BeginRenameCommand}"
-                                                CommandParameter="{Binding}"
-                                                IsVisible="{Binding !IsPendingDelete}" />
-                                        <Button Content="Export..."
-                                                Margin="0,0,6,6"
-                                                Command="{Binding #Root.((vm:TemplatesViewModel)DataContext).ExportCommand}"
-                                                CommandParameter="{Binding}"
-                                                IsVisible="{Binding !IsPendingDelete}" />
-                                        <Button Content="Delete"
-                                                Margin="0,0,6,6"
-                                                Command="{Binding #Root.((vm:TemplatesViewModel)DataContext).DeleteCommand}"
-                                                CommandParameter="{Binding}"
-                                                IsVisible="{Binding !IsPendingDelete}" />
-                                        <Button Classes="Danger"
-                                                Content="Confirm Delete?"
-                                                Margin="0,0,6,6"
-                                                Command="{Binding #Root.((vm:TemplatesViewModel)DataContext).DeleteCommand}"
-                                                CommandParameter="{Binding}"
-                                                IsVisible="{Binding IsPendingDelete}" />
-                                        <Button Content="Cancel"
-                                                Margin="0,0,6,6"
-                                                Command="{Binding #Root.((vm:TemplatesViewModel)DataContext).CancelDeleteCommand}"
-                                                CommandParameter="{Binding}"
-                                                IsVisible="{Binding IsPendingDelete}" />
+                                        <Button Content="Run" Margin="0,0,6,6" Command="{Binding #Root.((vm:TemplatesViewModel)DataContext).RunCommand}" CommandParameter="{Binding}" ToolTip.Tip="Search using this template's phone sequences, bypassing the phonemizer." />
+                                        <Button Content="Rename" Margin="0,0,6,6" Command="{Binding #Root.((vm:TemplatesViewModel)DataContext).BeginRenameCommand}" CommandParameter="{Binding}" IsVisible="{Binding !IsPendingDelete}" />
+                                        <Button Content="Export..." Margin="0,0,6,6" Command="{Binding #Root.((vm:TemplatesViewModel)DataContext).ExportCommand}" CommandParameter="{Binding}" IsVisible="{Binding !IsPendingDelete}" />
+                                        <Button Content="Delete" Margin="0,0,6,6" Command="{Binding #Root.((vm:TemplatesViewModel)DataContext).DeleteCommand}" CommandParameter="{Binding}" IsVisible="{Binding !IsPendingDelete}" />
+                                        <Button Classes="Danger" Content="Confirm Delete?" Margin="0,0,6,6" Command="{Binding #Root.((vm:TemplatesViewModel)DataContext).DeleteCommand}" CommandParameter="{Binding}" IsVisible="{Binding IsPendingDelete}" />
+                                        <Button Content="Cancel" Margin="0,0,6,6" Command="{Binding #Root.((vm:TemplatesViewModel)DataContext).CancelDeleteCommand}" CommandParameter="{Binding}" IsVisible="{Binding IsPendingDelete}" />
                                     </WrapPanel>
                                 </StackPanel>
-
                                 <StackPanel Spacing="4" IsVisible="{Binding IsEditing}">
                                     <TextBox Text="{Binding EditName}" PlaceholderText="Template name" />
                                     <TextBox Text="{Binding EditDescription}" PlaceholderText="Description (optional)" />
-
                                     <WrapPanel Margin="0,4,0,0">
-                                        <Button Content="Save"
-                                                Margin="0,0,6,6"
-                                                Command="{Binding #Root.((vm:TemplatesViewModel)DataContext).SaveRenameCommand}"
-                                                CommandParameter="{Binding}" />
-                                        <Button Content="Cancel"
-                                                Margin="0,0,6,6"
-                                                Command="{Binding #Root.((vm:TemplatesViewModel)DataContext).CancelRenameCommand}"
-                                                CommandParameter="{Binding}" />
+                                        <Button Content="Save" Margin="0,0,6,6" Command="{Binding #Root.((vm:TemplatesViewModel)DataContext).SaveRenameCommand}" CommandParameter="{Binding}" />
+                                        <Button Content="Cancel" Margin="0,0,6,6" Command="{Binding #Root.((vm:TemplatesViewModel)DataContext).CancelRenameCommand}" CommandParameter="{Binding}" />
                                     </WrapPanel>
                                 </StackPanel>
                             </Panel>
@@ -106,27 +57,39 @@
                 </ListBox.ItemTemplate>
             </ListBox>
 
-            <Grid Grid.Column="1" Margin="6,0,0,0" RowDefinitions="Auto,Auto,Auto,*" IsVisible="{Binding HasSelectedTemplate}">
+            <Grid Grid.Column="1" Margin="6,0,0,0" RowDefinitions="Auto,Auto,Auto,Auto,*" IsVisible="{Binding HasSelectedTemplate}">
                 <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="8" Margin="0,0,0,8">
                     <TextBlock Classes="HeaderLabel" Text="Mode" VerticalAlignment="Center" />
-                    <ComboBox ItemsSource="{Binding Modes}"
-                              SelectedItem="{Binding SelectedMode}" />
+                    <ComboBox ItemsSource="{Binding Modes}" SelectedItem="{Binding SelectedMode}" />
                     <TextBlock Classes="HeaderLabel" Text="Search scope" VerticalAlignment="Center" Margin="12,0,0,0" />
-                    <ComboBox ItemsSource="{Binding CatalogOptions}"
-                              SelectedItem="{Binding SelectedCatalogOption}"
-                              DisplayMemberBinding="{Binding Name}" />
+                    <ComboBox ItemsSource="{Binding CatalogOptions}" SelectedItem="{Binding SelectedCatalogOption}" DisplayMemberBinding="{Binding Name}" />
                 </StackPanel>
 
-                <!-- Phone-sequence editor, folded into this panel rather than a separate Tool (#19 has no registrable Tool abstraction to plug one into - see TemplatesViewModel's class doc). -->
+                <!-- #36: explicit matcher knobs use Template.SearchOptionsJson, the same payload TemplateSearchService consumes. -->
                 <Border Grid.Row="1" Padding="10" Margin="0,0,0,8" BorderThickness="1" BorderBrush="{StaticResource BorderMid}" CornerRadius="4">
+                    <StackPanel Spacing="6">
+                        <TextBlock Classes="HeaderLabel" Text="Search options" />
+                        <WrapPanel>
+                            <StackPanel Margin="0,0,10,4"><TextBlock Classes="FieldLabel" Text="Insertion"/><TextBox Width="76" Text="{Binding SelectedTemplate.EditInsertionCost}" /></StackPanel>
+                            <StackPanel Margin="0,0,10,4"><TextBlock Classes="FieldLabel" Text="Deletion"/><TextBox Width="76" Text="{Binding SelectedTemplate.EditDeletionCost}" /></StackPanel>
+                            <StackPanel Margin="0,0,10,4"><TextBlock Classes="FieldLabel" Text="Substitution"/><TextBox Width="76" Text="{Binding SelectedTemplate.EditSubstitutionMaxCost}" /></StackPanel>
+                            <StackPanel Margin="0,0,10,4"><TextBlock Classes="FieldLabel" Text="Word boundary"/><TextBox Width="76" Text="{Binding SelectedTemplate.EditWordBoundaryCost}" /></StackPanel>
+                            <StackPanel Margin="0,0,10,4"><TextBlock Classes="FieldLabel" Text="Minimum score"/><TextBox Width="76" Text="{Binding SelectedTemplate.EditMinimumScore}" /></StackPanel>
+                            <StackPanel Margin="0,0,10,4"><TextBlock Classes="FieldLabel" Text="Max results"/><TextBox Width="76" Text="{Binding SelectedTemplate.EditMaxResults}" /></StackPanel>
+                        </WrapPanel>
+                        <WrapPanel>
+                            <Button Content="Save options" Margin="0,0,6,0" Command="{Binding SaveSearchOptionsCommand}" CommandParameter="{Binding SelectedTemplate}" />
+                            <Button Content="Reset to mode defaults" Command="{Binding ResetSearchOptionsCommand}" CommandParameter="{Binding SelectedTemplate}" />
+                        </WrapPanel>
+                    </StackPanel>
+                </Border>
+
+                <Border Grid.Row="2" Padding="10" Margin="0,0,0,8" BorderThickness="1" BorderBrush="{StaticResource BorderMid}" CornerRadius="4">
                     <StackPanel Spacing="4">
                         <TextBlock Classes="HeaderLabel" Text="Add a pronunciation variant" />
                         <StackPanel Orientation="Horizontal" Spacing="6">
                             <TextBox Text="{Binding NewVariantLabel}" PlaceholderText="Label (e.g. &quot;US accent&quot;)" Width="160" />
-                            <TextBox Text="{Binding NewVariantPhonesRaw}"
-                                     PlaceholderText="Phones, space-separated. &quot;|&quot; marks a word boundary."
-                                     FontFamily="monospace"
-                                     Width="360" />
+                            <TextBox Text="{Binding NewVariantPhonesRaw}" PlaceholderText="Phones, space-separated. &quot;|&quot; marks a word boundary." FontFamily="monospace" Width="360" />
                             <Button Content="Add Variant" Command="{Binding AddVariantCommand}" />
                         </StackPanel>
                         <TextBlock Classes="FieldLabel" Text="{Binding DetectionMessage}" TextWrapping="Wrap" IsVisible="{Binding HasDetectionMessage}" />
@@ -134,39 +97,43 @@
                     </StackPanel>
                 </Border>
 
-                <TextBlock Grid.Row="2" Classes="HeaderLabel" Text="Variants (matches if ANY variant matches)" Margin="0,0,0,4" />
+                <TextBlock Grid.Row="3" Classes="HeaderLabel" Text="Variants (matches if ANY variant matches)" Margin="0,0,0,4" />
 
-                <Grid Grid.Row="3" RowDefinitions="Auto,Auto,*">
-                    <ListBox Grid.Row="0" MaxHeight="160" ItemsSource="{Binding Variants}">
+                <Grid Grid.Row="4" RowDefinitions="Auto,Auto,*">
+                    <ListBox Grid.Row="0" MaxHeight="190" ItemsSource="{Binding Variants}">
                         <ListBox.ItemTemplate>
                             <DataTemplate x:DataType="vm:TemplateVariantRowViewModel">
                                 <Border Padding="6" Margin="0,2" BorderThickness="0,0,0,1" BorderBrush="{StaticResource BorderMid}">
-                                    <Grid ColumnDefinitions="Auto,*,Auto,Auto">
-                                        <TextBlock Grid.Column="0" Text="{Binding Label}" FontWeight="Bold" Margin="0,0,10,0" Foreground="{StaticResource TextPrimary}" />
-                                        <TextBlock Grid.Column="1" Text="{Binding PhonesRaw}" FontFamily="monospace" Foreground="{StaticResource TextSecondary}" TextWrapping="Wrap" />
-                                        <TextBlock Grid.Column="2" Text="{Binding AlphabetDisplay}" Classes="HeaderLabel" Margin="10,0" />
-                                        <Button Grid.Column="3" Content="Remove"
-                                                Command="{Binding #Root.((vm:TemplatesViewModel)DataContext).RemoveVariantCommand}"
-                                                CommandParameter="{Binding}" />
-                                    </Grid>
+                                    <Panel>
+                                        <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto" IsVisible="{Binding !IsEditing}">
+                                            <TextBlock Grid.Column="0" Text="{Binding Label}" FontWeight="Bold" Margin="0,0,10,0" Foreground="{StaticResource TextPrimary}" />
+                                            <TextBlock Grid.Column="1" Text="{Binding PhonesRaw}" FontFamily="monospace" Foreground="{StaticResource TextSecondary}" TextWrapping="Wrap" />
+                                            <TextBlock Grid.Column="2" Text="{Binding AlphabetDisplay}" Classes="HeaderLabel" Margin="10,0" />
+                                            <Button Grid.Column="3" Content="Edit" Margin="0,0,6,0" Command="{Binding #Root.((vm:TemplatesViewModel)DataContext).BeginVariantEditCommand}" CommandParameter="{Binding}" />
+                                            <Button Grid.Column="4" Content="Remove" Command="{Binding #Root.((vm:TemplatesViewModel)DataContext).RemoveVariantCommand}" CommandParameter="{Binding}" />
+                                        </Grid>
+                                        <StackPanel Spacing="4" IsVisible="{Binding IsEditing}">
+                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                <TextBox Width="150" Text="{Binding EditLabel}" PlaceholderText="Variant label" />
+                                                <TextBox Width="350" Text="{Binding EditPhonesRaw}" FontFamily="monospace" PlaceholderText="Phones" />
+                                                <TextBlock Text="{Binding AlphabetDisplay}" Classes="HeaderLabel" VerticalAlignment="Center" />
+                                            </StackPanel>
+                                            <WrapPanel>
+                                                <Button Content="Save" Margin="0,0,6,0" Command="{Binding #Root.((vm:TemplatesViewModel)DataContext).SaveVariantEditCommand}" CommandParameter="{Binding}" />
+                                                <Button Content="Cancel" Command="{Binding #Root.((vm:TemplatesViewModel)DataContext).CancelVariantEditCommand}" CommandParameter="{Binding}" />
+                                            </WrapPanel>
+                                        </StackPanel>
+                                    </Panel>
                                 </Border>
                             </DataTemplate>
                         </ListBox.ItemTemplate>
                     </ListBox>
 
                     <ItemsControl Grid.Row="1" Margin="0,8,0,0" ItemsSource="{Binding RecentRuns}">
-                        <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate>
-                                <WrapPanel Orientation="Horizontal" />
-                            </ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="models:SearchHistoryEntry">
-                                <Button Classes="FilterPill"
-                                        Content="{Binding TemplateName, StringFormat='↻ {0}'}"
-                                        ToolTip.Tip="{Binding ScopeDescription}"
-                                        Command="{Binding #Root.((vm:TemplatesViewModel)DataContext).RerunCommand}"
-                                        CommandParameter="{Binding}" />
+                                <Button Classes="FilterPill" Content="{Binding TemplateName, StringFormat='↻ {0}'}" ToolTip.Tip="{Binding ScopeDescription}" Command="{Binding #Root.((vm:TemplatesViewModel)DataContext).RerunCommand}" CommandParameter="{Binding}" />
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
@@ -182,9 +149,7 @@
                                         </StackPanel>
                                         <TextBlock Text="{Binding SourceText}" FontSize="15" Foreground="{StaticResource TextPrimary}" />
                                         <TextBlock Text="{Binding Ipa}" FontFamily="monospace" Foreground="{StaticResource TextSecondary}" />
-                                        <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,4,0,0">
-                                            <Button Content="▶ Play" Command="{Binding PlayCommand}" />
-                                        </StackPanel>
+                                        <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,4,0,0"><Button Content="▶ Play" Command="{Binding PlayCommand}" /></StackPanel>
                                     </StackPanel>
                                 </Border>
                             </DataTemplate>
