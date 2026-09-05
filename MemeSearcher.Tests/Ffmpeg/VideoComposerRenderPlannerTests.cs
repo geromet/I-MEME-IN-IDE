@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using MemeSearcher.Infrastructure.Ffmpeg;
 
 namespace MemeSearcher.Tests.Ffmpeg;
@@ -90,6 +91,81 @@ public class VideoComposerRenderPlannerTests
             [new VideoRenderInput(Path.Combine(Path.GetTempPath(), "clip.mp4"), 0, 1)],
             Path.Combine(Path.GetTempPath(), "out.mp4"),
             new VideoCaption("hello", "left")));
+    }
+
+    [Fact]
+    public async Task CompositePlan_ExecutesWithRealFfmpegAndProducesExpectedDuration()
+    {
+        var locator = new FFmpegToolLocator();
+        var status = await locator.LocateAsync();
+        if (!status.IsInstalled)
+        {
+            return;
+        }
+
+        var tempDir = Directory.CreateTempSubdirectory("meme composer real ffmpeg ").FullName;
+        try
+        {
+            var first = Path.Combine(tempDir, "source one.mp4");
+            var second = Path.Combine(tempDir, "source two.mp4");
+            await GenerateVideoAsync(status.ExecutablePath!, first, 440);
+            await GenerateVideoAsync(status.ExecutablePath!, second, 880);
+
+            var output = Path.Combine(tempDir, "render output.mp4");
+            var plan = VideoComposerRenderPlanner.Create(
+                [
+                    new VideoRenderInput(first, 0.1, 0.6),
+                    new VideoRenderInput(second, 0.2, 0.7),
+                ],
+                output);
+
+            await RunFfmpegAsync(status.ExecutablePath!, plan.Arguments);
+
+            Assert.True(File.Exists(output));
+            var duration = await new MediaMetadataProbe(new FFprobeToolLocator()).TryGetDurationAsync(output);
+            Assert.NotNull(duration);
+            Assert.InRange(duration!.Value.TotalSeconds, 0.7, 1.3);
+        }
+        finally
+        {
+            Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    private static Task GenerateVideoAsync(string ffmpegPath, string outputPath, int frequency) =>
+        RunFfmpegAsync(
+            ffmpegPath,
+            [
+                "-y",
+                "-f", "lavfi", "-i", "color=c=black:s=160x120:d=1",
+                "-f", "lavfi", "-i", $"sine=frequency={frequency}:duration=1",
+                "-shortest",
+                "-c:v", "libx264",
+                "-pix_fmt", "yuv420p",
+                "-c:a", "aac",
+                outputPath,
+            ]);
+
+    private static async Task RunFfmpegAsync(string ffmpegPath, IEnumerable<string> arguments)
+    {
+        var startInfo = new ProcessStartInfo(ffmpegPath)
+        {
+            RedirectStandardError = true,
+            RedirectStandardOutput = true,
+            UseShellExecute = false,
+        };
+        foreach (var argument in arguments)
+        {
+            startInfo.ArgumentList.Add(argument);
+        }
+
+        using var process = Process.Start(startInfo)!;
+        var stdout = process.StandardOutput.ReadToEndAsync();
+        var stderr = process.StandardError.ReadToEndAsync();
+        await process.WaitForExitAsync();
+        await stdout;
+        var error = await stderr;
+        Assert.True(process.ExitCode == 0, error);
     }
 }
 
