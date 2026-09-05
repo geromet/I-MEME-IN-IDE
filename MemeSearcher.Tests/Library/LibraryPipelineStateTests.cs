@@ -117,7 +117,7 @@ public sealed class LibraryPipelineStateTests
 
             var summaries = await new LibraryService(factory).GetAllAsync();
 
-            var populated = Assert.Single(summaries.Where(x => x.Id == populatedId));
+            var populated = Assert.Single(summaries, x => x.Id == populatedId);
             Assert.True(populated.HasTranscript);
             Assert.Equal(1, populated.SegmentCount);
             Assert.Equal(3, populated.WordCount);
@@ -131,7 +131,7 @@ public sealed class LibraryPipelineStateTests
             Assert.Equal("Alignment: partial (2/3)", row.AlignmentStateDisplay);
             Assert.Equal("Index: ready", row.IndexStateDisplay);
 
-            var empty = Assert.Single(summaries.Where(x => x.Id == emptyId));
+            var empty = Assert.Single(summaries, x => x.Id == emptyId);
             Assert.False(empty.HasTranscript);
             Assert.Equal(0, empty.WordCount);
             Assert.Equal(0, empty.AlignedWordCount);
