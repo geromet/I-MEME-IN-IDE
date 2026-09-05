@@ -1,3 +1,4 @@
+using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace MemeSearcher.ViewModels;
@@ -14,9 +15,7 @@ public partial class SearchViewModel
     partial void OnSelectedComponentChanged(CompositeComponentRowViewModel? value)
     {
         if (value is null)
-        {
             return;
-        }
 
         SelectedCompositeResult = CompositeResults.FirstOrDefault(result => result.Components.Contains(value));
     }
@@ -33,8 +32,6 @@ public partial class SearchViewModel
     partial void OnSelectedCompositeResultChanged(CompositeSearchResultRowViewModel? value)
     {
         if (value is not null)
-        {
             SelectedResult = null;
-        }
     }
 }
