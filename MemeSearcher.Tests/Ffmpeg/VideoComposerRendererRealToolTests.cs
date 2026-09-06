@@ -7,7 +7,7 @@ namespace MemeSearcher.Tests.Ffmpeg;
 public class VideoComposerRendererRealToolTests
 {
     [Fact]
-    public async Task RenderAsync_ExecutesPlannerArgumentsWithRealFfmpeg()
+    public async Task RenderAsync_ExecutesPlannerArgumentsWithRealFfmpegAndReportsProgress()
     {
         var locator = new FFmpegToolLocator();
         var status = await locator.LocateAsync();
@@ -26,13 +26,32 @@ public class VideoComposerRendererRealToolTests
             var plan = VideoComposerRenderPlanner.Create(
                 [new VideoRenderInput(source, 0.1, 0.7)],
                 output);
+            var updates = new List<VideoRenderProgress>();
 
-            var result = await new VideoComposerRenderer(locator).RenderAsync(plan);
+            var result = await new VideoComposerRenderer(locator).RenderAsync(
+                plan,
+                new SynchronousProgress<VideoRenderProgress>(updates.Add));
 
             Assert.True(result.Success, result.Error);
             Assert.Equal(output, result.OutputPath);
             Assert.True(File.Exists(output));
             Assert.True(new FileInfo(output).Length > 0);
+
+            var preparing = Assert.First(updates);
+            Assert.Equal(VideoRenderStage.Preparing, preparing.Stage);
+            Assert.Equal(TimeSpan.Zero, preparing.Processed);
+            Assert.Equal(0d, preparing.Fraction);
+
+            Assert.Contains(
+                updates,
+                update => update.Stage == VideoRenderStage.Rendering
+                    && update.Processed >= TimeSpan.Zero
+                    && update.Fraction is >= 0d and <= 1d);
+
+            var completed = Assert.Last(updates);
+            Assert.Equal(VideoRenderStage.Completed, completed.Stage);
+            Assert.Equal(TimeSpan.FromSeconds(0.6), completed.Processed);
+            Assert.Equal(1d, completed.Fraction);
         }
         finally
         {
@@ -150,5 +169,10 @@ public class VideoComposerRendererRealToolTests
         await stdout;
         var error = await stderr;
         Assert.True(process.ExitCode == 0, error);
+    }
+
+    private sealed class SynchronousProgress<T>(Action<T> handler) : IProgress<T>
+    {
+        public void Report(T value) => handler(value);
     }
 }
