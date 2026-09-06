@@ -41,7 +41,9 @@ public class VideoComposerRenderPlannerTests
         Assert.True(firstIndex >= 0 && secondIndex > firstIndex);
 
         var filter = plan.Arguments[plan.Arguments.IndexOf("-filter_complex") + 1];
-        Assert.Contains("[0:v:0][0:a:0][1:v:0][1:a:0]concat=n=2:v=1:a=1[vbase][abase]", filter);
+        Assert.Contains("[0:v:0]scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2,setsar=1[v0]", filter);
+        Assert.Contains("[1:v:0]scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2,setsar=1[v1]", filter);
+        Assert.Contains("[v0][0:a:0][v1][1:a:0]concat=n=2:v=1:a=1[vbase][abase]", filter);
         Assert.Equal("[vbase]", plan.Arguments[plan.Arguments.IndexOf("-map") + 1]);
     }
 
@@ -109,8 +111,8 @@ public class VideoComposerRenderPlannerTests
         {
             var first = Path.Combine(tempDir, "source one.mp4");
             var second = Path.Combine(tempDir, "source two.mp4");
-            await GenerateVideoAsync(status.ExecutablePath!, first, 440);
-            await GenerateVideoAsync(status.ExecutablePath!, second, 880);
+            await GenerateVideoAsync(status.ExecutablePath!, first, 440, "160x120", "1");
+            await GenerateVideoAsync(status.ExecutablePath!, second, 880, "320x180", "4/3");
 
             var output = Path.Combine(tempDir, "render output.mp4");
             var plan = VideoComposerRenderPlanner.Create(
@@ -133,14 +135,20 @@ public class VideoComposerRenderPlannerTests
         }
     }
 
-    private static Task GenerateVideoAsync(string ffmpegPath, string outputPath, int frequency) =>
+    private static Task GenerateVideoAsync(
+        string ffmpegPath,
+        string outputPath,
+        int frequency,
+        string dimensions,
+        string sampleAspectRatio) =>
         RunFfmpegAsync(
             ffmpegPath,
             [
                 "-y",
-                "-f", "lavfi", "-i", "color=c=black:s=160x120:d=1",
+                "-f", "lavfi", "-i", $"color=c=black:s={dimensions}:d=1",
                 "-f", "lavfi", "-i", $"sine=frequency={frequency}:duration=1",
                 "-shortest",
+                "-vf", $"setsar={sampleAspectRatio}",
                 "-c:v", "libx264",
                 "-pix_fmt", "yuv420p",
                 "-c:a", "aac",
