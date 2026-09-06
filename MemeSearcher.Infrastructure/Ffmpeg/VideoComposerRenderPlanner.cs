@@ -19,6 +19,9 @@ public sealed record VideoRenderPlan(
 /// </summary>
 public static class VideoComposerRenderPlanner
 {
+    private const int CompositeCanvasWidth = 1280;
+    private const int CompositeCanvasHeight = 720;
+
     public static VideoRenderPlan Create(
         IReadOnlyList<VideoRenderInput> inputs,
         string outputPath,
@@ -96,8 +99,18 @@ public static class VideoComposerRenderPlanner
         }
         else
         {
+            for (var i = 0; i < normalizedInputs.Length; i++)
+            {
+                // concat requires corresponding streams to share geometry. Normalize every clip
+                // to a deterministic 16:9 canvas while preserving content aspect ratio and making
+                // sample aspect ratio explicit; padding prevents stretching or cropping.
+                filters.Add(
+                    $"[{i}:v:0]scale={CompositeCanvasWidth}:{CompositeCanvasHeight}:force_original_aspect_ratio=decrease,"
+                    + $"pad={CompositeCanvasWidth}:{CompositeCanvasHeight}:(ow-iw)/2:(oh-ih)/2,setsar=1[v{i}]");
+            }
+
             var concatInputs = string.Concat(Enumerable.Range(0, normalizedInputs.Length)
-                .Select(i => $"[{i}:v:0][{i}:a:0]"));
+                .Select(i => $"[v{i}][{i}:a:0]"));
             filters.Add($"{concatInputs}concat=n={normalizedInputs.Length}:v=1:a=1[vbase][abase]");
             videoMap = "[vbase]";
             audioMap = "[abase]";
