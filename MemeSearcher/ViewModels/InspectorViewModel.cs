@@ -1,21 +1,50 @@
 using System;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using MemeSearcher.Core.Interfaces;
 using MemeSearcher.Core.Search;
+using MemeSearcher.Infrastructure.Ffmpeg;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace MemeSearcher.ViewModels;
 
 /// <summary>
 /// Backs the shared Inspector panel for single-source and composite results. Both modes reuse the
-/// same phone timing primitive; composite sections project already-shipped component provenance
-/// rather than creating a second alignment model. Waveform remains the later #35 slice.
+/// same phone timing primitive; composite sections project already-shipped component provenance.
+/// #35 waveform context is decoded only for the current selection and is cancelled/discarded when
+/// the selection changes.
 /// </summary>
-public partial class InspectorViewModel(IMediaPlayerLauncher playerLauncher) : ViewModelBase
+public partial class InspectorViewModel : ViewModelBase
 {
+    private readonly IMediaPlayerLauncher _playerLauncher;
+    private readonly Func<string, double, double, CancellationToken, Task<WaveformSampleResult>>? _sampleWaveformAsync;
+    private CancellationTokenSource? _waveformCancellation;
+    private long _selectionGeneration;
+
+    public InspectorViewModel(IMediaPlayerLauncher playerLauncher)
+        : this(playerLauncher, (Func<string, double, double, CancellationToken, Task<WaveformSampleResult>>?)null)
+    {
+    }
+
+    public InspectorViewModel(
+        IMediaPlayerLauncher playerLauncher,
+        [FromKeyedServices("ffmpeg")] IExternalToolLocator ffmpegLocator)
+        : this(playerLauncher, new WaveformSampler(ffmpegLocator).SampleAsync)
+    {
+    }
+
+    public InspectorViewModel(
+        IMediaPlayerLauncher playerLauncher,
+        Func<string, double, double, CancellationToken, Task<WaveformSampleResult>>? sampleWaveformAsync)
+    {
+        _playerLauncher = playerLauncher;
+        _sampleWaveformAsync = sampleWaveformAsync;
+    }
+
     [ObservableProperty]
     private bool _hasSelection;
 
@@ -42,6 +71,7 @@ public partial class InspectorViewModel(IMediaPlayerLauncher playerLauncher) : V
 
     public ObservableCollection<PhoneBlockViewModel> PhoneBlocks { get; } = [];
     public ObservableCollection<CompositeInspectorComponentViewModel> CompositeComponents { get; } = [];
+    public WaveformStripViewModel Waveform { get; } = new();
 
     [ObservableProperty]
     private PhoneCoverageStripViewModel _coverageStrip = new([]);
@@ -83,6 +113,7 @@ public partial class InspectorViewModel(IMediaPlayerLauncher playerLauncher) : V
 
         HasExtraPhonemes = ExtraPhonemes.Count > 0;
         AlignmentSummary = SummarizeAlignment(PhoneBlocks, "match");
+        StartWaveformLoad(Waveform, result.MediaPath, result.StartSeconds, result.EndSeconds, _selectionGeneration);
     }
 
     /// <summary>#35: show every component in assembly order using the provenance already present on the composite row.</summary>
@@ -100,7 +131,14 @@ public partial class InspectorViewModel(IMediaPlayerLauncher playerLauncher) : V
 
         for (var index = 0; index < result.Components.Count; index++)
         {
-            CompositeComponents.Add(new CompositeInspectorComponentViewModel(result.Components[index], index + 1));
+            var component = new CompositeInspectorComponentViewModel(result.Components[index], index + 1);
+            CompositeComponents.Add(component);
+            StartWaveformLoad(
+                component.Waveform,
+                component.MediaPath,
+                component.StartSeconds,
+                component.EndSeconds,
+                _selectionGeneration);
         }
     }
 
@@ -112,7 +150,7 @@ public partial class InspectorViewModel(IMediaPlayerLauncher playerLauncher) : V
             return;
         }
 
-        var outcome = await playerLauncher.OpenAsync(MediaPath, start);
+        var outcome = await _playerLauncher.OpenAsync(MediaPath, start);
         SeekStatus = FormatSeekOutcome(outcome, block.Symbol, start, null);
     }
 
@@ -124,12 +162,72 @@ public partial class InspectorViewModel(IMediaPlayerLauncher playerLauncher) : V
             return;
         }
 
-        var outcome = await playerLauncher.OpenAsync(phone.MediaPath, start);
+        var outcome = await _playerLauncher.OpenAsync(phone.MediaPath, start);
         SeekStatus = FormatSeekOutcome(outcome, phone.Block.Symbol, start, phone.MediaTitle);
+    }
+
+    private void StartWaveformLoad(
+        WaveformStripViewModel target,
+        string? mediaPath,
+        double? startSeconds,
+        double? endSeconds,
+        long generation)
+    {
+        if (mediaPath is null || startSeconds is not { } start || endSeconds is not { } end)
+        {
+            target.SetUnavailable("Waveform unavailable: media file or timing is missing.");
+            return;
+        }
+
+        if (_sampleWaveformAsync is null)
+        {
+            target.SetUnavailable("Waveform unavailable: waveform sampler is not configured.");
+            return;
+        }
+
+        _waveformCancellation ??= new CancellationTokenSource();
+        var token = _waveformCancellation.Token;
+        target.Begin();
+        _ = LoadWaveformAsync(target, mediaPath, start, end, generation, token);
+    }
+
+    private async Task LoadWaveformAsync(
+        WaveformStripViewModel target,
+        string mediaPath,
+        double startSeconds,
+        double endSeconds,
+        long generation,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var result = await _sampleWaveformAsync!(mediaPath, startSeconds, endSeconds, cancellationToken);
+            if (generation == _selectionGeneration && !cancellationToken.IsCancellationRequested)
+            {
+                target.Apply(result);
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // A newer selection owns the Inspector now. The stale completion publishes nothing.
+        }
+        catch (Exception ex)
+        {
+            if (generation == _selectionGeneration && !cancellationToken.IsCancellationRequested)
+            {
+                target.SetUnavailable($"Waveform unavailable: {ex.Message}");
+            }
+        }
     }
 
     private void ResetPresentation()
     {
+        _waveformCancellation?.Cancel();
+        _waveformCancellation?.Dispose();
+        _waveformCancellation = null;
+        _selectionGeneration++;
+        Waveform.Reset();
+
         HasSelection = false;
         IsSingleSelection = false;
         IsCompositeSelection = false;
