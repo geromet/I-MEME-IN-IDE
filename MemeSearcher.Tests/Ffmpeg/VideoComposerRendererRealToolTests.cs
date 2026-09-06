@@ -37,7 +37,8 @@ public class VideoComposerRendererRealToolTests
             Assert.True(File.Exists(output));
             Assert.True(new FileInfo(output).Length > 0);
 
-            var preparing = Assert.First(updates);
+            Assert.NotEmpty(updates);
+            var preparing = updates[0];
             Assert.Equal(VideoRenderStage.Preparing, preparing.Stage);
             Assert.Equal(TimeSpan.Zero, preparing.Processed);
             Assert.Equal(0d, preparing.Fraction);
@@ -48,7 +49,7 @@ public class VideoComposerRendererRealToolTests
                     && update.Processed >= TimeSpan.Zero
                     && update.Fraction is >= 0d and <= 1d);
 
-            var completed = Assert.Last(updates);
+            var completed = updates[^1];
             Assert.Equal(VideoRenderStage.Completed, completed.Stage);
             Assert.Equal(TimeSpan.FromSeconds(0.6), completed.Processed);
             Assert.Equal(1d, completed.Fraction);
